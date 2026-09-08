@@ -1,0 +1,3799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>像素马里奥 · Canvas 2D 平台跳跃</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#141428;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:"Microsoft YaHei",monospace;touch-action:none;}
+  /* 画面尺寸：宽/高双向约束（横屏不再被裁切）；触屏下按 --ctlH 让出控件带，按钮永不压住画面 */
+  canvas{aspect-ratio:960/544;width:min(96vw, calc((100vh - var(--ctlH,0px) - 64px) * 1.7647), 960px);
+    height:auto;margin-bottom:var(--ctlH,0px);image-rendering:pixelated;border:4px solid #000;border-radius:4px;
+    box-shadow:0 10px 40px rgba(0,0,0,.6);background:#5c94fc;}
+  @supports (height:100dvh){ canvas{ width:min(96vw, calc((100dvh - var(--ctlH,0px) - 64px) * 1.7647), 960px);} }
+  body.coarse{--ctlH:calc(180px + env(safe-area-inset-bottom, 0px));}
+  @media (orientation: landscape){ body.coarse{--ctlH:0px;} }   /* 横屏：按键移入画面左右侧带，不再占用纵向空间 */
+  .tip{color:#9fb4d0;margin-top:12px;font-size:13px;letter-spacing:1px;user-select:none;text-align:center;}
+  .tip .tch{display:none;}
+  body.coarse .tip .kbd{display:none;} body.coarse .tip .tch{display:inline;}
+  /* 触屏虚拟按键（仅触屏设备显示，热区 ≥44px；底部避开刘海安全区）。
+     视觉统一：方向键=箭头符号 / 动作键=单字汉字 / 系统键=符号，三组各自语义一致；深色底 + 白描边保证亮暗画面均可读 */
+  #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:9;}
+  .tbtn{position:absolute;pointer-events:auto;width:60px;height:60px;border-radius:14px;background:rgba(8,12,30,.42);border:2px solid rgba(255,255,255,.55);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .06s ease,background .06s ease,border-color .06s ease;box-shadow:0 3px 8px rgba(0,0,0,.4);}
+  /* 按压态：缩放 + 加深 + 白描边（.on 由 JS 置位，滑移换键时视觉同步；无震动的设备靠它补手感） */
+  .tbtn:active,.tbtn.on{transform:scale(.92);background:rgba(8,12,30,.62);border-color:#ffffff;box-shadow:inset 0 0 0 2px rgba(0,0,0,.4),0 3px 8px rgba(0,0,0,.4);}
+  /* 竖屏：下排 [◀▼▶] 方向区 + [跑][跳] A/B 并排；上排 火 + 系统工具行 */
+  #btnL{left:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
+  #btnD{left:74px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
+  #btnR{left:138px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
+  #btnJ{right:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:76px;height:76px;font-size:26px;}
+  #btnB{right:94px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
+  #btnF{right:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));}
+  #btnP{left:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
+  #btnX{left:58px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
+  @media (orientation: landscape){
+    /* 横屏：画面居中，左右侧带放手柄式按键（左=方向，右=动作），系统键贴画面顶角 */
+    #btnL{left:calc(2px + env(safe-area-inset-left, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));}
+    #btnR{left:calc(2px + env(safe-area-inset-left, 0px));bottom:calc(86px + env(safe-area-inset-bottom, 0px));}
+    #btnD{left:calc(72px + env(safe-area-inset-left, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
+    #btnJ{right:calc(2px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:72px;height:72px;}
+    #btnF{right:calc(84px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
+    #btnB{right:calc(2px + env(safe-area-inset-right, 0px));bottom:calc(94px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
+    #btnP{left:auto;right:calc(2px + env(safe-area-inset-right, 0px));bottom:auto;top:calc(8px + env(safe-area-inset-top, 0px));width:40px;height:40px;font-size:15px;}
+    #btnX{left:auto;right:calc(48px + env(safe-area-inset-right, 0px));bottom:auto;top:calc(8px + env(safe-area-inset-top, 0px));width:40px;height:40px;font-size:15px;}
+  }
+  /* 横屏引导遮罩：仅触屏竖屏时显示（JS 控制 .show），横屏或桌面端始终隐藏 */
+  #rotate{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;background:rgba(10,10,25,.92);color:#fff;font-family:"Microsoft YaHei",monospace;text-align:center;}
+  #rotate.show{display:flex;}
+  .rphone{width:64px;height:112px;border:4px solid #9fb4d0;border-radius:12px;position:relative;animation:rturn 1.8s ease-in-out infinite;}
+  .rphone::after{content:"";position:absolute;left:50%;bottom:6px;width:16px;height:3px;border-radius:2px;background:#9fb4d0;transform:translateX(-50%);}
+  .rarrow{position:absolute;right:-34px;top:-6px;font-size:34px;color:#ffd23f;}
+  @keyframes rturn{0%,20%{transform:rotate(0)}60%,80%{transform:rotate(90deg)}100%{transform:rotate(90deg)}}
+  .rtxt{font-size:22px;letter-spacing:4px;}
+  #rotate button{padding:14px 40px;font-size:18px;border-radius:10px;border:2px solid #ffd23f;background:rgba(255,210,63,.15);color:#ffd23f;font-family:inherit;}
+  #rotate button.rskip{border-color:#5a6a85;background:transparent;color:#9fb4d0;font-size:15px;padding:10px 28px;}
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="544"></canvas>
+<div class="tip"><span class="kbd">A / D 移动 ｜ Shift 奔跑 ｜ 空格 / W 跳跃 ｜ S / ↓ 蹲下・入管 ｜ J / X 火球 ｜ M 音效 ｜ P 暂停 ｜ R 重开</span><span class="tch">横屏体验最佳：左手方向 ・ 右手跳/火/跑 ｜ 竖屏亦可玩</span></div>
+<div id="touch">
+  <div class="tbtn" id="btnL">◀</div>
+  <div class="tbtn" id="btnR">▶</div>
+  <div class="tbtn" id="btnJ">跳</div>
+  <div class="tbtn" id="btnF">火</div>
+  <div class="tbtn" id="btnB">跑</div>
+  <div class="tbtn" id="btnD">▼</div>
+  <div class="tbtn" id="btnP">Ⅱ</div>
+  <div class="tbtn" id="btnX">⛶</div>
+</div>
+<!-- 横屏引导遮罩：触屏竖屏时盖住画面，点按钮尝试全屏+锁定横屏，也可跳过继续竖屏玩 -->
+<div id="rotate">
+  <div class="rphone"><div class="rarrow">↻</div></div>
+  <div class="rtxt">请横屏游戏</div>
+  <button id="btnGo">横屏开始</button>
+  <button id="btnSkip" class="rskip">继续竖屏</button>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * 《像素马里奥》单文件 2D 平台跳跃游戏 —— 引擎基线 + 核心玩法系统
+ * 纯 HTML + Canvas 2D + 原生 JS，零依赖、无 CDN。
+ * 分区目录（Ctrl+F 搜 “======” 定位）：
+ *   1. 常量与配置        2. 瓦片地图系统       3. 输入
+ *   4. 物理与 AABB 碰撞  5. 道具/敌人/火球     6. 状态机与特效
+ *   6.5 资源管理 Boss 奖励房                    7. 音效（WebAudio 振荡器 8-bit 占位）  8. 摄像机
+ *   9. 像素渲染          10. 主循环（固定时间步） 11. 调试/自动化钩子
+ * 引擎段（1~4、8、10 的既有函数）保持基线原样，玩法以扩展/新增方式挂入。
+ * ===================================================================== */
+
+/* ============================ 1. 常量与配置 ============================ */
+const TILE      = 32;                 // 瓦片边长（px），即 tileSize
+const tileSize  = TILE;                // 规格要求的别名常量
+const VIEW_W    = 960, VIEW_H = 544;  // 画布逻辑尺寸（30 列 × 17 行）
+
+/* ---- 物理量纲全部为“每秒制”（px/s、px/s²） ---- */
+const GRAVITY    = 2400;              // 重力加速度
+const JUMP_V     = 784;               // 起跳初速度（向上）：静止最大跳约 4 格（原版 SMB）
+const JUMP_CUT   = 0.45;              // 松开跳键时上升速度截断比例（可变跳跃高度）
+const MAX_FALL   = 1100;              // 最大下落速度上限
+const MOVE_ACCEL = 2400;              // 地面行走加速度
+const AIR_ACCEL  = 1700;              // 空中操控加速度
+const FRICTION   = 2800;              // 地面摩擦力（无输入时减速到 0）
+const MAX_SPEED  = 330;               // 水平最大速度（基准值，供音效归一化）
+const WALK_MAX   = 250;               // 步行最高速度（原版 walk 档）
+const RUN_MAX    = 440;               // B 键奔跑最高速度（原版 run 档）
+const SKID_V     = 170;               // 反向打滑触发的最低速度
+const COYOTE     = 0.08;              // 土狼时间：离开平台后仍可起跳的宽限
+const JUMP_BUFFER= 0.12;              // 跳跃预输入缓冲
+const STEP       = 1 / 120;           // 物理固定时间步
+const BUMP_T     = 0.2;               // 砖块被顶后的弹跳动画时长
+const PLAYER_W   = 24, PLAYER_H = 30; // 小形态 AABB（1×1 格）
+const STUCK_T    = 0.8;               // 嵌进实心瓦片超时 → 自动复位（防卡死）
+
+/* ---- 玩法常量 ---- */
+const BIG_W    = 24, BIG_H = 52;      // 大/火力形态 AABB（1×2 格）
+const INVULN_T = 2.0;                 // 变身/受击后的无敌帧时长
+const STOMP_BOUNCE      = 460;        // 踩敌反弹速度
+const STOMP_BOUNCE_HELD = 700;        // 按住跳键时踩敌反弹速度
+const GOOMBA_SPEED = 72;              // 板栗仔移速（较原版上调：增加迎面压迫感，仍远低于步速 250）
+const KOOPA_SPEED  = 86;              // 乌龟移速
+const PARA_HOP_V   = 560;             // 跳跃乌龟起跳速度（原版 1-3 红跳跳龟：落地即弹起）
+const SHELL_SPEED  = 460;             // 龟壳被踢飞速度
+const ITEM_SPEED   = 90;              // 蘑菇滑行速度
+const FIREBALL_SPEED = 460, FIREBALL_MAX = 2, FIREBALL_LIFE = 2.2;
+const POLE_SLIDE_V = 260;             // 抓旗杆下滑速度
+const START_LIVES  = 3;
+/* ---- 计分（规格：金币+200 / 踩敌+100 / 顶砖+50） ---- */
+const PTS_COIN = 200, PTS_STOMP = 100, PTS_BRICK = 50, PTS_POWER = 1000,
+      PTS_SHELL_KILL = 400, PTS_FIRE_KILL = 200;
+/* 关卡可变量：由 loadLevel() 从当前 LEVELS 项写入（原为 const，多关卡后改为可变） */
+let LEVEL_NAME = 'World 1-1';
+let GOAL_COL   = 198;             // 终点旗杆所在列（当前关卡）
+/* ---- 无敌星 / 倒计时（原版 1-1 机制） ---- */
+const STAR_TIME   = 9;              // 无敌星持续时间（秒）
+const STAR_SPEED  = 120;            // 星星滑行速度
+const STAR_BOUNCE = 380;            // 星星落地弹跳初速
+let TIME_LIMIT  = 400;              // 关卡倒计时（当前关卡；原版 1-1 = 400）：归零死亡，剩余时间过关加分
+/* ---- 食人花（Piranha Plant）：固定种在指定水管管口，四阶段伸缩周期 ---- */
+const PLANT_SPR_W = 32, PLANT_SPR_H = 64;   // 精灵尺寸（16×32 字符画 @2px）
+const PLANT_HIT_W = 26;                     // 伤害判定盒宽（略窄于精灵，对玩家公平）
+const PLANT_RISE  = 2 * TILE;               // 最大伸出高度：管口向上 2 格
+const PLANT_T = { rise: 0.8, hold: 0.4, fall: 0.8, wait: 0.6 };
+const PLANT_CYCLE = PLANT_T.rise + PLANT_T.hold + PLANT_T.fall + PLANT_T.wait;   // 2.6s
+/* ---- 连踩连击（原版八档：不落地连击逐档升级，第 8 连踩起封顶 4000） ---- */
+const COMBO_TABLE = [100, 200, 400, 500, 800, 1000, 2000, 4000];
+/* ---- 过关终幕（原版仪式感：滑杆→走进城堡→升旗烟花→时间×50 逐秒折算） ---- */
+let CASTLE_COL = GOAL_COL + 5;          // 城堡左缘列（loadLevel 依据当前关卡终点列写入）
+const HOUSE_WALK_V = 96;                    // 走进城堡的自动步行速度
+const FIREWORK_INTERVAL = 0.3, FIREWORK_PARTS = 8, FIREWORK_LIFE = 0.9, FIREWORK_GRAV = 150;
+const TALLY_TICK = 0.02;                    // 时间折算：每 0.02s 扣 1 秒 +50 分
+const MULTI_COINS = 10;                     // 十金币砖顶出次数
+
+/* ============================ 2. 瓦片地图系统 ============================ */
+/* 瓦片 ID：
+ *   0 空地   1 地面砖   2 砖块   3 问号砖   4 金币(非实心)   5 管道   6 已用问号砖   7 隐藏砖(不可见，顶出才显形)
+ *   8 商店砖(Boss 房内，实心可顶，顶起=购买) */
+const T_EMPTY = 0, T_GROUND = 1, T_BRICK = 2, T_QBLOCK = 3, T_COIN = 4, T_PIPE = 5, T_QUSED = 6, T_HIDDEN = 7, T_SHOP = 8;
+const SOLID_TILES = new Set([T_GROUND, T_BRICK, T_QBLOCK, T_PIPE, T_QUSED, T_SHOP]);   // 金币/隐藏砖非实心
+
+let MAP_W = 224; const MAP_H = 17; // 17 行 × 32px = 544，正好一屏高，摄像机只需横向跟随
+const GROUND_ROW = 15;              // 地表表层行（其下 16 行同为地面砖）
+const ROW_LOW = 11, ROW_HIGH = 7;   // 两行悬浮平台高度
+
+/** 关卡数据表：每项是一关的纯数据（buildMap / spawnEnemies 等按当前关卡 cur 展开为运行时状态）
+ *  字段：name / w(地图列宽) / goal(旗杆列) / time(倒计时) / pits / pipes / bricks / qblocks /
+ *        coins / stairs / hidden / qContents / brickContents / enemies / under(可选，地下奖励房) */
+function stairsFrom(groups) {                       // 由”起点列×高度×方向”批量生成台阶格，避免手写长表
+  const s = [];
+  for (const [x0, n, dir] of groups)
+    for (let i = 0; i < n; i++) s.push([x0 + i, dir > 0 ? i + 1 : n - i]);
+  return s;
+}
+function ceilFrom(groups) {                           // 天花板砖层（row 0-1）：由”起止列”区间批量生成
+  const s = [];
+  for (const [a, b] of groups) for (let x = a; x <= b; x++) s.push([x, 0], [x, 1]);
+  return s;
+}
+const LEVELS = [
+  { name: 'World 1-1', w: 224, goal: 198, time: 400,
+    pits: [[69,70],[86,88],[153,154]],
+    pipes: [ {col:28,h:2},{col:38,h:3,plant:true},{col:46,h:4,enter:1},{col:57,h:4,plant:true,enter:0},
+             {col:163,h:2},{col:179,h:2} ],
+    bricks: [
+      [20,ROW_LOW],[22,ROW_LOW],[24,ROW_LOW],[93,ROW_LOW],[100,ROW_LOW],[101,ROW_LOW],[119,ROW_LOW],[130,ROW_LOW],[131,ROW_LOW],[158,ROW_LOW],[160,ROW_LOW],
+      [80,ROW_HIGH],[81,ROW_HIGH],[82,ROW_HIGH],[83,ROW_HIGH],[84,ROW_HIGH],[85,ROW_HIGH],[86,ROW_HIGH],[87,ROW_HIGH],
+      [91,ROW_HIGH],[92,ROW_HIGH],[93,ROW_HIGH],[118,ROW_HIGH],[121,ROW_HIGH],
+      [128,ROW_HIGH],[129,ROW_HIGH],[130,ROW_HIGH],
+    ],
+    qblocks: [
+      [16,ROW_LOW],[21,ROW_LOW],[23,ROW_LOW],[64,ROW_LOW],[78,ROW_LOW],[94,ROW_LOW],[106,ROW_LOW],[109,ROW_LOW],[113,ROW_LOW],[159,ROW_LOW],
+      [22,ROW_HIGH],[94,ROW_HIGH],[109,ROW_HIGH],[119,ROW_HIGH],[120,ROW_HIGH],[131,ROW_HIGH],
+    ],
+    coins: [
+      [68,ROW_LOW],[71,ROW_LOW],[85,ROW_LOW],[89,ROW_LOW],[152,ROW_LOW],[155,ROW_LOW],
+      [106,ROW_HIGH],[107,ROW_HIGH],[108,ROW_HIGH],[124,ROW_LOW],[125,ROW_LOW],[126,ROW_LOW],
+    ],
+    stairs: stairsFrom([[134,4,1],[141,4,-1],[148,4,1],[155,4,-1],[181,8,1]]),
+    hidden: [ [21, ROW_HIGH, '1up'], [64, ROW_HIGH, 'coin'] ],
+    qContents: { '21,11': 'power' },                 // 原版 109 ? 为金币；星星藏于 col101 普通砖（全景图实证）
+    brickContents: { '130,11': 'multi', '101,11': 'star' },
+    enemies: [
+      { kind:'goomba', col:22 },{ kind:'goomba', col:41 },{ kind:'goomba', col:51 },{ kind:'goomba', col:52 },
+      { kind:'koopa',  col:60 },{ kind:'goomba', col:80 },{ kind:'goomba', col:82 },{ kind:'goomba', col:97 },
+      { kind:'goomba', col:107 },{ kind:'goomba', col:110 },{ kind:'goomba', col:113 },{ kind:'koopa', col:124 },
+      { kind:'goomba', col:128 },{ kind:'goomba', col:129 },{ kind:'goomba', col:174 },{ kind:'goomba', col:176 },
+    ],
+    unders: [ { w: 30, exitCol: 163 },                          // col57 入管 → 原版金币房 → 从 col163 出口管回到地上
+               { w: 40, exitCol: 179, type: 'boss' } ],        // col46 入管 → 资源管理 Boss 房 → 从 col179 出口管回到地上
+  },
+  { name: 'World 1-2', w: 176, goal: 166, time: 400,
+    // 地下关（机制对齐原版）：全蓝主题 + 天花板砖层；吊管食人花、递增爬管段、
+    // 尾段两座金币房（入管→横管出）+ 终点入管抄近道从出口管回到旗杆前
+    theme: 'under',
+    pits: [[45,46],[92,93]],
+    pipes: [
+      // 天花板吊管（管口朝下，倒挂食人花）
+      {col:18,h:2,top:true,row:2,plant:true}, {col:38,h:3,top:true,row:2,plant:true},
+      {col:66,h:2,top:true,row:2,plant:true}, {col:104,h:3,top:true,row:2,plant:true},
+      {col:136,h:2,top:true,row:2,plant:true},
+      // 地面爬管段（原版 1-2 标志：管越爬越高）
+      {col:52,h:2},{col:58,h:3},{col:74,h:4},{col:80,h:4},
+      // 金币房入口管 + 各自出口管
+      {col:112,h:2,enter:0},{col:116,h:2},
+      {col:120,h:2,enter:1},{col:126,h:2},
+      // 终点近道管 → 出口管回到旗杆前
+      {col:144,h:3,enter:2},{col:154,h:2},
+    ],
+    bricks: [
+      ...ceilFrom([[0,152]]),                        // 天花板砖层（旗杆前开阔）
+      [8,11],[10,11],                                // 开局 ? 夹砖（力量蘑菇）
+      [14,7],[15,7],[16,7],[17,7],
+      [24,11],[25,11],[26,11],
+      [30,7],[31,7],[32,7],[33,7],                   // 31 = 十金币砖
+      [42,11],[43,11],[48,11],
+      [60,7],[61,7],[62,7],
+      [67,11],[68,11],[69,11],                       // 68 = 星星砖
+      [70,7],[71,7],[72,7],
+      [86,7],[87,7],[88,7],[89,7],[90,7],
+      [96,11],[97,11],[98,11],
+      [108,7],[109,7],[110,7],
+      [130,11],[132,11],
+      [140,7],[141,7],
+    ],
+    qblocks: [ [9,11],[56,11],[99,11],[131,11] ],
+    coins: [
+      [24,10],[25,10],[26,10],
+      [49,10],[50,10],
+      [60,6],[61,6],[62,6],
+      [108,6],[109,6],[110,6],
+      [140,6],[141,6],
+    ],
+    stairs: [],
+    hidden: [ [78,7,'1up'] ],
+    qContents: { '9,11': 'power', '56,11': 'coin', '99,11': 'power', '131,11': 'coin' },
+    brickContents: { '31,7': 'multi', '68,11': 'star' },
+    enemies: [
+      { kind:'goomba', col:12 },{ kind:'goomba', col:22 },{ kind:'koopa', col:27 },
+      { kind:'goomba', col:34 },{ kind:'koopa',  col:55 },{ kind:'goomba', col:63 },
+      { kind:'goomba', col:87 },{ kind:'goomba', col:89 },{ kind:'koopa',  col:100 },
+      { kind:'goomba', col:108 },{ kind:'koopa', col:128 },{ kind:'goomba', col:134 },
+    ],
+    unders: [ { w: 30, exitCol: 116 }, { w: 26, exitCol: 126 }, { w: 24, exitCol: 154 } ],
+  },
+  { name: 'World 1-3', w: 164, goal: 150, time: 300, music: 'sky',
+    // 高空关（机制对齐原版）：小段起始地面 → 浮空岛链跨越深渊 → 两座水平升降台 → 石梯+旗杆
+    // 敌人构成同原版：3 板栗怪 + 3 红乌龟（边缘折返）+ 2 红跳跳龟（落地即弹起）；?块仅 1 个（力量）
+    pits: [[9,103]],
+    pipes: [],
+    lifts: [ {col:38,row:10,range:6,speed:60}, {col:53,row:8,range:5,speed:75} ],
+    bricks: [
+      [12,11],[13,11],[14,11],                       // I1（板栗怪）
+      [17,9],[18,9],[19,9],                          // I2 金币岛
+      [22,11],[23,11],[24,11],[25,11],               // I3（红龟）
+      [27,9],                                        // 上高岛踏步
+      [28,7],[29,7],[30,7],[31,7],                   // 高岛（顶上4金币）
+      [33,11],[35,11],                               // ?块夹砖
+      [48,11],[49,11],[50,11],                       // I5（两台之间）
+      [62,11],[63,11],[64,11],[65,11],[66,11],       // I6（板栗怪）
+      [69,11],[70,11],[71,11],[72,11],[73,11],       // I7（跳跳龟）
+      [76,9],[77,9],[78,9],                          // I8 短岛（跳跳龟+3金币）
+      [81,11],[82,11],
+      [85,9],[86,9],[87,9],[88,9],[89,9],            // I10（红龟）
+      [92,11],[93,11],[94,11],[95,11],               // I11（板栗怪）
+      [97,9],                                        // 末高岛踏步
+      [99,7],[100,7],[101,7],[102,7],[103,7],        // I12（红龟）→ 落回终点地面
+    ],
+    qblocks: [ [34,11] ],
+    coins: [
+      [17,8],[18,8],[19,8],
+      [28,6],[29,6],[30,6],[31,6],
+      [40,8],[41,8],[42,8],                          // 升降台1上空
+      [55,6],[56,6],[57,6],                          // 升降台2上空
+      [76,8],[77,8],[78,8],
+    ],
+    stairs: stairsFrom([[140,6,1]]),
+    hidden: [],
+    qContents: { '34,11': 'power' },
+    brickContents: {},
+    enemies: [
+      { kind:'goomba', col:13, row:11 },
+      { kind:'koopa',  col:23, row:11, red:true },
+      { kind:'goomba', col:64, row:11 },
+      { kind:'para',   col:71, row:11, red:true },
+      { kind:'para',   col:77, row:9, red:true },
+      { kind:'koopa',  col:87, row:9, red:true },
+      { kind:'goomba', col:93, row:11 },
+      { kind:'koopa',  col:101, row:7, red:true },
+    ],
+    unders: [],
+  },
+];
+
+/* 运行时当前关卡指针 + 由 cur 展开的可变状态（spawns 每关载入时重建，done 标记复位） */
+let levelIdx = 0, cur = LEVELS[0];
+let spawns = [];
+let lifts = [];                        // 水平升降台（原版 1-3 移动台）：{x0,y,range,speed,w,h,x,dir,dx}
+
+/** 载入第 idx 关：写入关卡级变量并重建两张地图（地上 / 地下） */
+function loadLevel(idx) {
+  levelIdx = idx; cur = LEVELS[idx];
+  LEVEL_NAME = cur.name; MAP_W = cur.w; GOAL_COL = cur.goal; CASTLE_COL = cur.goal + 5; TIME_LIMIT = cur.time;
+  overMap = buildMap();
+  /* 奖励房按 unders 索引生成：type:'boss' → 资源管理 Boss 房（自带商店砖/竞技场），其余 → 原版金币房 */
+  underMaps = (cur.unders || []).map(u => u.type === 'boss' ? buildBossRoomMap() : buildUnderMap(u.w));
+  spawns = cur.enemies.map(s => ({ kind: s.kind, x: s.col * TILE, col: s.col, row: s.row || GROUND_ROW, red: !!s.red, done: false }));
+  lifts = (cur.lifts || []).map(L => ({ x0: L.col * TILE, y: L.row * TILE, range: (L.range || 4) * TILE,
+    speed: L.speed || 60, w: 96, h: 16, x: L.col * TILE, dir: 1, dx: 0 }));
+}
+
+/** 生成二维瓦片数组 map[row][col]（按当前关卡 cur 展开） */
+function buildMap() {
+  const m = Array.from({ length: MAP_H }, () => new Array(MAP_W).fill(T_EMPTY));
+  const set = (x, y, t) => { if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) m[y][x] = t; };
+  for (let x = 0; x < MAP_W; x++) { set(x, GROUND_ROW, T_GROUND); set(x, GROUND_ROW + 1, T_GROUND); }
+  for (const [a, b] of cur.pits) for (let x = a; x <= b; x++) { set(x, GROUND_ROW, T_EMPTY); set(x, GROUND_ROW + 1, T_EMPTY); }
+  for (const p of cur.pipes) {
+    if (p.top) { const r0 = p.row !== undefined ? p.row : 2;      // 吊管：自 row 向下挂 h 格（管口朝下）
+      for (let x = p.col; x <= p.col + 1; x++) for (let k = 0; k < p.h; k++) set(x, r0 + k, T_PIPE);
+    } else for (let x = p.col; x <= p.col + 1; x++) for (let k = 0; k < p.h; k++) set(x, GROUND_ROW - 1 - k, T_PIPE);
+  }
+  for (const [x, y] of cur.bricks)  set(x, y, T_BRICK);
+  for (const [x, y] of cur.qblocks) set(x, y, T_QBLOCK);
+  for (const [x, y] of cur.coins)   set(x, y, T_COIN);
+  for (const [x, h] of cur.stairs)  for (let k = 0; k < h; k++) set(x, GROUND_ROW - 1 - k, T_GROUND);
+  for (const [x, y] of cur.hidden) set(x, y, T_HIDDEN);
+  return m;
+}
+let map = null;                                  // 当前世界瓦片数组（指向 overMap / underMap）；由 loadLevel 初始化
+let world = 'over';                              // 'over' 地上 / 'under' 地下奖励房
+let overMap = null, underMaps = [];            // 地上地图 + N 个地下奖励房地图（按 enter 索引取用）
+let roomIdx = 0;                               // 当前所在奖励房索引
+
+/** 地下奖励房（原版金币房）：宽 W 入参；砖天花板 + 左右实心墙 + 金币阵 + 右侧横管出口 */
+function buildUnderMap(W) {
+  W = W || 30;
+  const R = W - 1;
+  const m = Array.from({ length: MAP_H }, () => new Array(W).fill(T_EMPTY));
+  for (let x = 0; x < W; x++) { m[0][x] = T_BRICK; m[1][x] = T_BRICK; m[15][x] = T_GROUND; m[16][x] = T_GROUND; }
+  for (let y = 0; y < 15; y++) { m[y][0] = T_GROUND; m[y][R] = T_GROUND; }   // 左右墙
+  const c0 = Math.round(W * 0.23), c1 = Math.round(W * 0.73);
+  for (let x = c0; x <= c1; x++) m[14][x] = T_COIN;                            // 地面金币带
+  for (let x = c0 + 2; x <= c1 - 2; x++) if ((x - c0) % 4 !== 3) m[13][x] = T_COIN;   // 上层堆叠
+  m[12][c0 + 3] = T_COIN; m[12][c1 - 3] = T_COIN;
+  return m;
+}
+
+/* ---- 资源管理 Boss 房：布局常量（放在本节 = 顶层 loadLevel() 调用前必须完成求值，避免 TDZ） ---- */
+const BR_W            = 40;    // 房间列宽（40×32=1280px，摄像机横向滚动）
+const BR_SHOP_ROW     = 11;    // 商店砖所在行
+const BR_ARENA_COL    = 25;    // 竞技场起始列：玩家中心越过此列即激活 Boss
+const BR_EXIT_ARM_COL = 4;     // 入口区列上限：站在此范围内按 ↓ 主动退出
+const BR_INIT_COINS   = 100;   // 入房发放的房内资金（独立于全局金币）
+/* 商品表：col 必须与 buildBossRoomMap 里的 T_SHOP 列一致；repeat=true → 购后砖块定时恢复可购 */
+const BR_SHOP = [
+  { col: 6,  key: 'doubleJump', name: '二段跳', price: 50,  tag: '2J',   desc: '空中可再跳一次', repeat: false },
+  { col: 9,  key: 'invincible', name: '无敌',   price: 100, tag: 'INV',  desc: '8 秒受击不扣血', repeat: true  },
+  { col: 12, key: 'speedBoost', name: '加速跑', price: 30,  tag: 'SPD',  desc: '移动速度 ×1.3',  repeat: false },
+  { col: 15, key: 'fireball',   name: '火球术', price: 80,  tag: 'FIRE', desc: '小形态也能扔火球', repeat: false },
+];
+/** Boss 房地图：砖天花板 + 地面 + 左右墙 + 商店砖 + 过渡区平台(带金币) + 竞技场高台 */
+function buildBossRoomMap() {
+  const W = BR_W, R = W - 1;
+  const m = Array.from({ length: MAP_H }, () => new Array(W).fill(T_EMPTY));
+  for (let x = 0; x < W; x++) { m[0][x] = T_BRICK; m[1][x] = T_BRICK; m[15][x] = T_GROUND; m[16][x] = T_GROUND; }
+  for (let y = 0; y < 15; y++) { m[y][0] = T_GROUND; m[y][R] = T_GROUND; }        // 左右墙
+  for (const it of BR_SHOP) m[BR_SHOP_ROW][it.col] = T_SHOP;                       // 商店区：列 6/9/12/15
+  for (const [a, b, r] of [[17, 19, 12], [20, 22, 10], [23, 24, 8]]) {            // 过渡区三级错落平台
+    for (let x = a; x <= b; x++) { m[r][x] = T_BRICK; m[r - 1][x] = T_COIN; }      // 平台上各放一枚金币
+  }
+  for (const [a, b, r] of [[28, 30, 11], [34, 36, 9]])                             // 竞技场两座高台（跳上台躲避）
+    for (let x = a; x <= b; x++) m[r][x] = T_BRICK;
+  return m;
+}
+
+/** 查询瓦片 ID；越界返回 -1 */
+function tileAt(x, y) {
+  if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return -1;
+  return map[y][x];
+}
+/** 实心判定：左右越界视为墙（地图边缘不穿墙）；顶部/底部开放（可跳出上沿、掉坑触发死亡） */
+function isSolid(x, y) {
+  if (y >= MAP_H) return false;
+  if (x < 0 || x >= MAP_W) return true;
+  if (y < 0) return false;
+  return SOLID_TILES.has(map[y][x]);
+}
+
+/* ============================== 3. 输入 ============================== */
+/* 按键状态对象：按下/松开均记录；jumpQueued 为预输入缓冲计时 */
+const input = { left: false, right: false, jump: false, down: false, run: false, jumpQueued: 0 };
+const KEYMAP = {
+  ArrowLeft: 'left',  KeyA: 'left',
+  ArrowRight: 'right', KeyD: 'right',
+  ArrowDown: 'down',  KeyS: 'down',
+  Space: 'jump', ArrowUp: 'jump', KeyW: 'jump',
+  ShiftLeft: 'run',  ShiftRight: 'run',
+};
+addEventListener('keydown', e => {
+  ensureAudio();                                   // 首次按键手势内解锁 AudioContext
+  if (gameState === 'title') {                     // 标题：↑↓/W S 选关（自动跳过未解锁），其余键开始
+    if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowDown' || e.code === 'KeyS') {
+      const dir = (e.code === 'ArrowUp' || e.code === 'KeyW') ? -1 : 1;
+      let n = titleSel;
+      for (let k = 0; k < LEVELS.length; k++) {
+        n = (n + dir + LEVELS.length) % LEVELS.length;
+        if (!levelLocked(n)) break;
+      }
+      if (n !== titleSel) { titleSel = n; sfx('coin'); }
+      return;
+    }
+    if (!levelLocked(titleSel)) startGame(); else sfx('bump');
+    return;
+  }
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
+  if (e.code === 'KeyR') { if (gameState === 'win') gameState = 'title'; else resetGame(); return; }
+  if (e.code === 'F3')   { showFps = !showFps; e.preventDefault(); return; }
+  if (e.code === 'KeyM') {                         // 音效总开关 + 持久化
+    audioOn = !audioOn;
+    if (masterGain) masterGain.gain.value = audioOn ? 1 : 0;
+    try { localStorage.setItem('pmario_mute', audioOn ? '0' : '1'); } catch (_) {}
+    return;
+  }
+  if (gameState !== 'play') return;                // 结算/暂停态不响应操作键
+  if (e.code === 'KeyJ' || e.code === 'KeyX') { if (!e.repeat) shootFireball(); return; }
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();                              // 防空格/方向键滚动页面
+  if (k === 'jump' && !input.jump && !e.repeat) input.jumpQueued = JUMP_BUFFER;
+  input[k] = true;
+});
+addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) input[k] = false; });
+addEventListener('blur', () => {                   // 失焦防按键卡死 + 自动暂停
+  input.left = input.right = input.jump = false;
+  if (gameState === 'play') togglePause();
+});
+
+/* ---- 触屏虚拟按键（Pointer 事件统一鼠标/触摸；仅触屏设备或首次触摸后显示） ---- */
+const touchPanel = document.getElementById('touch');
+function showTouch(){
+  if (touchPanel.style.display === 'block') return;
+  touchPanel.style.display = 'block';
+  document.body.classList.add('coarse');            // 触发控件带预留 + 触屏文案切换
+}
+if (matchMedia('(pointer: coarse)').matches) showTouch();
+addEventListener('touchstart', showTouch, { once: true, passive: true });
+addEventListener('resize', () => {                  // 旋转后重算（--ctlH 由媒体查询自动切换，这里只兜底画面尺寸）
+  if (document.body.classList.contains('coarse')) showTouch();
+});
+
+/* ---- 横屏引导（横屏优先）：触屏竖屏时盖遮罩；“横屏开始”=全屏+尝试锁定横屏；可跳过竖屏玩 ---- */
+const rotateEl = document.getElementById('rotate');
+let rotateDismissed = false;                         // 用户跳过一次后本次会话不再打扰
+function isTouchDevice(){ return matchMedia('(pointer: coarse)').matches; }
+function isPortrait(){ return matchMedia('(orientation: portrait)').matches; }
+function syncRotate(){
+  const want = isTouchDevice() && isPortrait() && !rotateDismissed;
+  rotateEl.classList.toggle('show', want);
+  if (want && gameState === 'play') togglePause();   // 中途转竖屏：先暂停再挡画面
+}
+requestAnimationFrame(syncRotate);                   // 延后一帧：等 gameState 等 let 声明完成，避免 TDZ 报错
+addEventListener('resize', syncRotate);
+addEventListener('orientationchange', syncRotate);
+document.getElementById('btnSkip').addEventListener('pointerdown', e => {
+  e.preventDefault(); rotateDismissed = true; syncRotate();
+});
+document.getElementById('btnGo').addEventListener('pointerdown', async e => {
+  e.preventDefault(); ensureAudio();
+  const root = document.documentElement;
+  try {                                              // 全屏（iOS 不支持元素全屏时静默跳过）
+    if (root.requestFullscreen) await root.requestFullscreen({ navigationUI: 'hide' });
+    else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+  } catch (_) {}
+  try {                                              // 锁定横屏：安卓 WebView/Chrome 有效，iOS 会 reject
+    await screen.orientation.lock('landscape');
+  } catch (_) {}
+  rotateDismissed = true; syncRotate();
+  showTouch();
+});
+document.addEventListener('fullscreenchange', () => { // 退出全屏时解除锁定，恢复跟随系统旋转
+  if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (_) {} }
+  syncRotate();
+});
+/* ---- 触感反馈：Vibration API（Android 有效；iOS 不实现 → canVibrate=false，自动只留视觉/音效）。
+     默认开启不设开关：系统级可关闭振动，游戏内不再占一个键位 ---- */
+const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+function buzz(ms) { if (canVibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
+
+/* ---- 触屏按键控制器：按住型（支持拇指在相邻键间滑移）+ 点击型（暂停/全屏/震动） ----
+ * 每键附带震动强度(ms)；无自带音效的持续键补一发极轻 tap 音，让 iPhone 等无震动环境也有“落键感”。 */
+const HOLD_KEYS = {
+  btnL: { down: () => input.left  = true,  up: () => input.left  = false, ms: 8,  tap: true  },
+  btnR: { down: () => input.right = true,  up: () => input.right = false, ms: 8,  tap: true  },
+  btnD: { down: () => input.down  = true,  up: () => input.down  = false, ms: 8,  tap: true  },
+  btnB: { down: () => input.run   = true,  up: () => input.run   = false, ms: 6,  tap: true  },
+  btnJ: { down: () => { input.jump = true; input.jumpQueued = JUMP_BUFFER; },
+          up: () => input.jump = false,     ms: 14, tap: false },   // 跳有 jump 音
+  btnF: { down: () => shootFireball(),      up: () => {},            ms: 14, tap: false },   // 火有 fire 音
+};
+const heldKeys = new Set();          // 当前被按住的键（同一键只生效一次）
+const ptrKey   = new Map();          // pointerId -> id（该指针当前压着的键）
+function keyOn(id) {
+  const h = HOLD_KEYS[id]; if (!h || heldKeys.has(id)) return;
+  heldKeys.add(id);
+  const el = document.getElementById(id); if (el) el.classList.add('on');
+  h.down(); buzz(h.ms); if (h.tap) sfx('tap');
+}
+function keyOff(id) {
+  if (!heldKeys.has(id)) return;
+  heldKeys.delete(id);
+  const el = document.getElementById(id); if (el) el.classList.remove('on');
+  const h = HOLD_KEYS[id]; if (h) h.up();
+}
+function holdIdAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return (el && el.classList && el.classList.contains('tbtn') && HOLD_KEYS[el.id]) ? el.id : null;
+}
+touchPanel.addEventListener('pointerdown', e => {
+  const id = e.target && e.target.id;
+  if (!HOLD_KEYS[id]) return;                        // 点击型按键交给各自的监听器
+  e.preventDefault(); ensureAudio();
+  if (gameState === 'title') { startGame(); return; }
+  ptrKey.set(e.pointerId, id); keyOn(id);
+});
+addEventListener('pointermove', e => {               // 滑移：按住的手指滑到另一枚按住键 → 换键（滑到空处保持，符合实体键语义）
+  const cur = ptrKey.get(e.pointerId);
+  if (cur === undefined) return;
+  const hit = holdIdAt(e.clientX, e.clientY);
+  if (!hit || hit === cur) return;
+  ptrKey.set(e.pointerId, hit); keyOff(cur); keyOn(hit);
+}, { passive: true });
+function ptrRelease(e) {
+  const cur = ptrKey.get(e.pointerId);
+  if (cur === undefined) return;
+  ptrKey.delete(e.pointerId); keyOff(cur);
+}
+addEventListener('pointerup', ptrRelease);
+addEventListener('pointercancel', ptrRelease);
+addEventListener('blur', () => { for (const id of [...heldKeys]) keyOff(id); ptrKey.clear(); });
+document.getElementById('btnP').addEventListener('pointerdown', e => {
+  e.preventDefault(); ensureAudio();
+  if (gameState === 'title') startGame();
+  else if (gameState === 'win') gameState = 'title';                     // 通关画面：回标题（可重选关卡）
+  else if (gameState === 'gameover') resetGame();
+  else togglePause();
+});
+/* 全屏切换（隐藏移动端地址栏换取更大画面；不支持的环境直接隐藏按钮） */
+(function bindFullscreen(){
+  const el = document.getElementById('btnX');
+  const root = document.documentElement;
+  const canFs = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+  if (!canFs) { el.style.display = 'none'; return; }
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); ensureAudio();
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    const req  = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (fs) { try { exit.call(document); } catch (err) {} }
+    else { try { req.call(root); } catch (err) {} }
+  });
+})();
+
+/* ========================= 4. 物理与 AABB 碰撞 ========================= */
+const player = { x: 0, y: 0, w: PLAYER_W, h: PLAYER_H, vx: 0, vy: 0,
+                 onGround: false, wasGround: false, facing: 1,
+                 cutDone: true, coyote: 0, runT: 0, stuckT: 0,
+                 mode: 'small', invulnT: 0, starT: 0,
+                 crouch: false, skidSfx: false };             // mode: small | big | fire
+const SPAWN = { x: 2 * TILE, y: GROUND_ROW * TILE - PLAYER_H };
+let respawnCount = 0;
+let checkpoint = { x: SPAWN.x, y: SPAWN.y };        // 重生点：向右推进到的最近安全地面
+
+function respawn() {
+  player.x = SPAWN.x; player.y = SPAWN.y;
+  player.vx = 0; player.vy = 0; player.cutDone = true; player.coyote = 0; player.stuckT = 0;
+  respawnCount++;
+}
+/** 死亡后重生：回到重生点（checkpoint），形态重置为小 */
+function respawnToCheckpoint() {
+  if (world !== 'over') {                              // 地下死亡 → 切回地上重生点
+    world = 'over'; map = overMap; MAP_W = cur.w;
+    enemies.length = 0; items.length = 0; fireballs.length = 0;
+  }
+  player.x = checkpoint.x; player.y = checkpoint.y;
+  player.vx = 0; player.vy = 0; player.cutDone = true; player.coyote = 0; player.stuckT = 0;
+  player.mode = 'small'; player.w = PLAYER_W; player.h = PLAYER_H; player.starT = 0;
+  player.invulnT = INVULN_T;                          // 复活无敌帧：防重生点贴脸敌人秒杀
+  respawnCount++;
+  /* 全局倒计时：死亡不重置，从死亡时刻继续走；归零后的死亡直接 Game Over（见 updateDying） */
+  /* 清场：把徘徊在重生点周围的敌人掀飞（不计分），杜绝“复活→被撞→再死”死循环 */
+  const zone = { x: player.x - 2 * TILE, y: player.y - TILE, w: player.w + 4 * TILE, h: player.h + 2 * TILE };
+  for (const e of enemies) {
+    if (e.dead || e.squashT > 0) continue;
+    if (aabb(zone, e)) { e.dead = true; e.vy = -300; e.vx = (Math.sign(e.x - player.x) || 1) * 140; }
+  }
+}
+
+/** 卡死自动复位：从当前列向两侧找“地表可站立”的列放回去（不惩罚，纯引擎健壮性） */
+function respawnSafe() {
+  const c0 = Math.max(1, Math.min(MAP_W - 2, Math.floor((player.x + player.w / 2) / TILE)));
+  for (let r = 1; r < 80; r++) {
+    for (const c of [c0 + r, c0 - r]) {
+      if (c < 1 || c >= MAP_W - 1) continue;
+      if (isSolid(c, GROUND_ROW) && !isSolid(c, GROUND_ROW - 2) && !isSolid(c, GROUND_ROW - 1)) {
+        player.x = c * TILE + 4; player.y = GROUND_ROW * TILE - player.h;
+        player.vx = 0; player.vy = 0; player.cutDone = true;
+        return;
+      }
+    }
+  }
+  respawn();
+}
+
+/* ---- 形态状态机：小(1×1) ⇄ 大(1×2) ⇄ 火力(1×2)；切换给无敌帧 ---- */
+function setMode(m) {
+  const bottom = player.y + player.h;
+  if (m !== player.mode) { morphFrom = player.mode; morphT = 0.6; }    // 变身定格：全场暂停 + 形态闪烁
+  player.mode = m;
+  player.w = BIG_W; player.h = BIG_H;
+  player.y = bottom - player.h;
+  player.invulnT = INVULN_T;                        // 变身短暂无敌帧（渲染闪烁）
+}
+function shrinkToSmall() {
+  const bottom = player.y + player.h;
+  morphFrom = player.mode; morphT = 0.6;             // 受击缩小同样定格闪烁
+  player.mode = 'small'; player.crouch = false;
+  player.w = PLAYER_W; player.h = PLAYER_H;
+  player.y = bottom - player.h;
+  player.invulnT = INVULN_T;
+  fxPush({ type: 'cap', x: player.x + 4, y: player.y - 4, vx: -70, vy: -420, t: 0, life: 0.8 });   // 帽子飞走（原版受击细节）
+  sfx('shrink');
+}
+/** 受击判定：火力/大 → 小；小 → 死亡。无敌帧内免疫 */
+function hurtPlayer() {
+  if (gameState !== 'play' || player.invulnT > 0) return;
+  if (bossRoom.active && bossRoom.buffs.invincible > 0) return;   // 房内商品「无敌」：受击不扣血（不杀 Boss，防御不替代输出）
+  comboStreak = 0;                                     // 被撞 → 连踩链清零
+  buzz(50);                                            // 受击重震（触屏事件反馈）
+  if (player.mode === 'small') die();
+  else shrinkToSmall();
+}
+
+/** 起身头顶空间检查：站起后大形态占据的顶行无实心瓦片才允许起身 */
+function crouchHeadroomFree(p) {
+  const L = Math.floor(p.x / TILE), R = Math.floor((p.x + p.w - 0.01) / TILE);
+  const topRow = Math.floor((p.y + p.h - BIG_H) / TILE);
+  for (let tx = L; tx <= R; tx++) if (isSolid(tx, topRow)) return false;
+  return true;
+}
+
+function updatePlayer(dt) {
+  const p = player;
+  p.invulnT = Math.max(0, p.invulnT - dt);
+  p.starT = Math.max(0, p.starT - dt);
+  // 倒计时归零的死亡判定已上提到 update() 顶层（涵盖滑管动画态），此处不再单独判
+
+  /* ---- Hurry-up：剩余时间 ≤100 → 警示音 + BGM 加速（原版） ---- */
+  if (!hurry && TIME_LIMIT - gameTime <= 100) { hurry = true; sfx('hurry'); }
+
+  /* ---- 下蹲（大/火力）：1 格高，地面不可移动；起跳保持小碰撞盒 ---- */
+  if (p.mode !== 'small') {
+    if (!p.crouch && input.down && p.onGround) {
+      const bottom = p.y + p.h;
+      p.crouch = true; p.h = 32; p.y = bottom - 32;
+    } else if (p.crouch && !input.down && p.onGround && crouchHeadroomFree(p)) {
+      const bottom = p.y + p.h;
+      p.crouch = false; p.h = BIG_H; p.y = bottom - BIG_H;
+    }
+  } else p.crouch = false;
+
+  /* ---- 水平：加速度 / 反向打滑 / 摩擦 / 走跑双档限速 ----
+   * 单一目标限速 cap：加速段与限速段共用同一个 cap，消除"先加速冲过 WALK_MAX 再事后回拉"的两套系统耦合。
+   * wantRun：按住跑键或离地 → 上限 RUN_MAX；地面松跑 → 上限 WALK_MAX。 */
+  const wantRun = input.run || !p.onGround;
+  const spdMul = (bossRoom.active && bossRoom.buffs.speedBoost) ? BR_SPEED_MUL : 1;   // 房内商品「加速跑」：仅本房有效
+  const cap = (wantRun ? RUN_MAX : WALK_MAX) * spdMul;
+  const dir = (p.crouch && p.onGround) ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  if (dir !== 0) {
+    const skid = p.onGround && Math.sign(p.vx) === -dir && Math.abs(p.vx) > SKID_V;   // 反向打滑
+    // 同向且已达当前档位上限则不再加速（打滑中除外，打滑要能快速反抽）；cap 也用于硬性夹紧
+    const atCap = !skid && Math.sign(p.vx) === Math.sign(dir) && Math.abs(p.vx) >= cap;
+    if (atCap) {
+      if (Math.abs(p.vx) > cap) p.vx = Math.sign(p.vx) * cap;
+    } else {
+      p.vx += dir * (skid ? MOVE_ACCEL * 1.7 : (p.onGround ? MOVE_ACCEL : AIR_ACCEL)) * dt;
+      if (!skid && Math.sign(p.vx) === Math.sign(dir)) p.vx = Math.sign(p.vx) * Math.min(Math.abs(p.vx), cap);
+    }
+    p.facing = dir;
+    if (skid) {                                      // 打滑：音效一次 + 扬尘
+      if (!p.skidSfx) { sfx('skid'); p.skidSfx = true; }
+      if (Math.random() < dt * 26)
+        fxPush({ type: 'dust', x: p.x + p.w / 2 + (Math.random() * 10 - 5), y: p.y + p.h - 4,
+                 vx: -dir * 40, vy: -50, t: 0, life: 0.35 });
+    } else p.skidSfx = false;
+  } else {
+    p.skidSfx = false;
+    if (p.onGround) {
+      const s = Math.sign(p.vx);
+      p.vx -= s * FRICTION * dt;
+      if (Math.sign(p.vx) !== s) p.vx = 0;           // 摩擦不越零反向
+    }
+  }
+  /* 跑→走动量回落：已按 RUN_MAX 冲刺后松开跑键，仍在地面同向时按 >加速率的速率收敛回 WALK_MAX */
+  if (!wantRun && p.onGround && Math.abs(p.vx) > cap) {
+    const over = Math.abs(p.vx) - cap;
+    p.vx -= Math.sign(p.vx) * Math.min(over, 2600 * dt);
+  }
+
+
+  /* ---- 跳跃：土狼时间 + 预输入缓冲 + 可变高度 + 跑动加成 ---- */
+  p.coyote = p.onGround ? COYOTE : p.coyote - dt;
+  if (input.jumpQueued > 0) {
+    input.jumpQueued -= dt;
+    if (p.coyote > 0) {                             // 起跳
+      p.vy = -(JUMP_V + Math.abs(p.vx) * 0.2);      // 原版：跑得越快跳得越高
+      p.onGround = false;
+      p.coyote = 0; p.cutDone = false; input.jumpQueued = 0;
+      jumpSfx(Math.abs(p.vx));                         // 音高随水平速度：跑得越快跳声越尖
+    }
+  }
+  /* ---- Boss 房商品「二段跳」：空中再按跳 → 追加一次 85% 强度起跳（落地恢复次数） ---- */
+  if (input.jumpQueued > 0 && !p.onGround && p.coyote <= 0 &&
+      bossRoom.active && bossRoom.buffs.doubleJump && bossRoom.buffs.canDoubleJump) {
+    p.vy = -(JUMP_V * 0.85 + Math.abs(p.vx) * 0.2);
+    p.onGround = false; p.cutDone = false; input.jumpQueued = 0;
+    bossRoom.buffs.canDoubleJump = false;
+    jumpSfx(Math.abs(p.vx));
+  }
+  if (!p.cutDone && !input.jump && p.vy < 0) {      // 上升中松开跳键 → 截断（短跳）
+    p.vy *= JUMP_CUT; p.cutDone = true;
+  }
+
+  /* ---- 逐轴解算：先水平后垂直，各自独立回退，杜绝“卡墙角” ---- */
+  p.x += p.vx * dt;
+  resolveX(p);
+
+  p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);
+  const wasGround = p.onGround;
+  p.onGround = false;
+  p.y += p.vy * dt;
+  resolveY(p);
+  if (!wasGround && p.onGround) comboStreak = 0;      // 落地 → 连踩链清零（原版规则）
+  if (p.onGround && bossRoom.active) bossRoom.buffs.canDoubleJump = true;   // 落地 → 恢复二段跳次数
+
+  /* ---- 防卡死：身体中心嵌进实心瓦片超时 → 复位到最近安全地面 ---- */
+  { const ccx = Math.floor((p.x + p.w / 2) / TILE), ccy = Math.floor((p.y + p.h / 2) / TILE);
+    if (isSolid(ccx, ccy)) { p.stuckT += dt; if (p.stuckT > STUCK_T) { respawnSafe(); p.stuckT = 0; } }
+    else p.stuckT = 0; }
+
+  p.runT += Math.abs(p.vx) * dt / 16;               // 跑动动画计时
+
+  /* ---- 重生点推进：站在实地面（非砖块悬浮台）且头顶开阔 → 记录（仅地上世界） ---- */
+  if (world === 'over' && p.onGround && Math.abs(p.y + p.h - GROUND_ROW * TILE) < 1) {
+    const c = Math.floor((p.x + p.w / 2) / TILE);
+    if (p.x > checkpoint.x && isSolid(c - 1, GROUND_ROW) && isSolid(c + 1, GROUND_ROW) &&
+        !isSolid(c, GROUND_ROW - 2) && !isSolid(c, GROUND_ROW - 3))
+      checkpoint = { x: c * TILE + 4, y: GROUND_ROW * TILE - p.h };
+  }
+
+  if (p.y > MAP_H * TILE + 60) die(true);            // 摔坑 → 直接 Game Over（用户规则：不扣命不重生）
+}
+
+/** 水平轴碰撞回退：只检查运动方向一侧的列；角色宽高 < 瓦片，纵向扫过的行全部检测 */
+function resolveX(e) {
+  const top = Math.floor(e.y / TILE);
+  const bot = Math.floor((e.y + e.h - 0.01) / TILE);
+  if (e.vx > 0) {
+    const col = Math.floor((e.x + e.w) / TILE);
+    for (let ty = top; ty <= bot; ty++)
+      if (isSolid(col, ty)) { e.x = col * TILE - e.w - 0.01; e.vx = 0; break; }
+  } else if (e.vx < 0) {
+    const col = Math.floor(e.x / TILE);
+    for (let ty = top; ty <= bot; ty++)
+      if (isSolid(col, ty)) { e.x = (col + 1) * TILE + 0.01; e.vx = 0; break; }
+  }
+}
+
+/** 垂直轴碰撞回退：下落→站地面；上升→顶头被挡并触发砖块弹跳 */
+function resolveY(e) {
+  const L = Math.floor(e.x / TILE), R = Math.floor((e.x + e.w - 0.01) / TILE);
+  if (e.vy > 0) {
+    const row = Math.floor((e.y + e.h) / TILE);
+    for (let tx = L; tx <= R; tx++)
+      if (isSolid(tx, row)) { e.y = row * TILE - e.h; e.vy = 0; e.onGround = true; break; }
+  } else if (e.vy < 0) {
+    const row = Math.floor(e.y / TILE);
+    let hit = false;
+    for (let tx = L; tx <= R; tx++)
+      if (isSolid(tx, row) || (row >= 0 && row < MAP_H && map[row][tx] === T_HIDDEN)) { hit = true; break; }
+    if (hit) {
+      e.y = (row + 1) * TILE; e.vy = 0;
+      if (e === player) headBump(row, L, R);
+      return 'ceil';
+    }
+  }
+  return null;
+}
+
+/** 敌人爬 1 格台阶：前方是 1 格高台阶且上方两格皆空 → 整体抬升一格继续走（2 格墙仍撞回头） */
+function tryStepUp(e, dir) {
+  if (!e.onGround) return false;
+  const col = Math.floor((dir > 0 ? e.x + e.w + 2 : e.x - 2) / TILE);   // 前方贴身探针格
+  const footRow = Math.floor((e.y + e.h - 1) / TILE);                   // 脚部所在格
+  if (!isSolid(col, footRow)) return false;                             // 前方不是台阶（平地/坑）
+  if (isSolid(col, footRow - 1) || isSolid(col, footRow - 2)) return false;   // 2 格以上 → 撞墙
+  e.y -= TILE;                                       // 瞬移抬升一格（脚下即台阶顶）
+  e.x += dir * 2;                                    // 微探入台阶列，让本帧 resolveY 落到台阶顶
+  return true;
+}
+
+/** 升降台推进：水平往复巡航（原版 1-3 移动台），dx 供载客随行 */
+function updateLifts(dt) {
+  for (const L of lifts) {
+    const px = L.x;
+    L.x += L.dir * L.speed * dt;
+    if (L.x >= L.x0 + L.range) { L.x = L.x0 + L.range; L.dir = -1; }
+    else if (L.x <= L.x0) { L.x = L.x0; L.dir = 1; }
+    L.dx = L.x - px;
+  }
+}
+/** 升降台 × 玩家：单向站面（只碰顶面，可从下方穿越）；站立随台横移，走出边缘即落 */
+function liftRide(dt) {
+  const p = player;
+  if (p.vy < 0) p.standLift = null;                    // 起跳脱离
+  if (p.standLift) {
+    const L = p.standLift;
+    if (p.x + p.w < L.x + 2 || p.x > L.x + L.w - 2) p.standLift = null;   // 走出台面边缘即脱离
+    else { p.x += L.dx; p.y = L.y - p.h; p.vy = 0; p.onGround = true; }   // 随行 + 钉住台面（防逐帧下陷脱台）
+  }
+  if (!p.standLift && p.vy >= 0) {
+    const feet = p.y + p.h, prevFeet = feet - p.vy * dt;
+    for (const L of lifts) {
+      if (p.x + p.w > L.x && p.x < L.x + L.w && prevFeet <= L.y + 4 && feet >= L.y) {
+        p.y = L.y - p.h; p.vy = 0; p.onGround = true; p.standLift = L;
+        break;
+      }
+    }
+  }
+}
+
+/** 通用实体位移：重力 + 瓦片碰撞 + 撞壁自动回头（蘑菇/敌人/龟壳/火球共用） */
+function moveEntity(e, dt) {
+  e.x += e.vx * dt;
+  const ovx = e.vx;
+  resolveX(e);
+  if (ovx !== 0 && e.vx === 0) {
+    // 活敌（板栗仔/乌龟）撞 1 格台阶 → 爬上去继续走；壳/道具/火球及其余情况撞壁回头
+    if ((e.kind === 'goomba' || e.kind === 'koopa' || e.kind === 'para') && tryStepUp(e, Math.sign(ovx))) e.vx = ovx;
+    else e.vx = -ovx;
+  }
+  e.vy = Math.min(e.vy + GRAVITY * dt, MAX_FALL);
+  e.onGround = false;
+  e.y += e.vy * dt;
+  resolveY(e);
+}
+
+/** 顶头：问号砖按内容出货；砖块小形态顶 N 次碎裂/大形态一顶即碎；其余实心只弹跳 */
+function headBump(row, L, R) {
+  const cx = Math.floor((player.x + player.w / 2) / TILE);
+  const seen = new Set();                            // 去重：单列居中时 cx==L==R，防同一砖重复结算
+  for (const tx of [cx, L, R]) {
+    if (tx < L || tx > R || seen.has(tx)) continue;
+    seen.add(tx);
+    const t = map[row][tx];
+    if (t === T_QBLOCK) {                            // 问号砖：弹金币或蘑菇/火之花
+      map[row][tx] = T_QUSED;
+      bumpTile(tx, row);
+      spawnFromBlock(cur.qContents[tx + ',' + row] || 'coin', tx, row);
+      brickKill(tx, row);
+    } else if (t === T_HIDDEN) {                     // 隐藏砖：顶出才显形 → 变已用砖（可站立）
+      map[row][tx] = T_QUSED;
+      bumpTile(tx, row);
+      sfx('bump');
+      const hc = cur.hidden.find(h => h[0] === tx && h[1] === row);
+      if (hc && hc[2] === '1up') spawnFromBlock('1up', tx, row);   // 1UP：弹出绿蘑菇
+      else gainCoin(tx * TILE + 8, row * TILE - 26, false);        // 金币：直接 +200 入账（无飞行金币）
+    } else if (t === T_BRICK) {                      // 砖块
+      const key = tx + ',' + row;
+      if (cur.brickContents[key] === 'star' && !starBricks.has(key)) {
+        // 星星砖：顶出无敌星，砖保持砖块外观且不碎（原版出物砖行为，大小形态一致）；出货后还原为普通砖
+        starBricks.add(key);
+        bumpTile(tx, row);
+        spawnFromBlock('star', tx, row);
+      } else if (cur.brickContents[key] === 'multi') {         // 十金币砖：每次顶出一枚，用尽变已用砖
+        let st = multiBricks.get(key);
+        if (!st) { st = { left: MULTI_COINS }; multiBricks.set(key, st); }
+        gainCoin(tx * TILE, row * TILE - 26, true);
+        bumpTile(tx, row);
+        if (--st.left <= 0) { map[row][tx] = T_QUSED; multiBricks.delete(key); }
+      } else if (player.mode !== 'small') {          // 大/火力：一顶即碎
+        breakBrick(tx, row);
+      } else {                                       // 小：只弹不碎（原版：小形态顶砖永不碎裂）
+        bumpTile(tx, row); sfx('bump');
+      }
+      brickKill(tx, row);
+    } else if (t === T_SHOP) {                         // Boss 房商店砖：顶起 = 购买（弹跳/音效/扣费在 buyShopItem 内）
+      buyShopItem(tx, row);
+    } else if (SOLID_TILES.has(t)) {                 // 地面/管道/已用砖：只弹一下
+      bumpTile(tx, row);
+      sfx('bump');
+      brickKill(tx, row);
+    }
+  }
+}
+/** 砖块碎裂：+50 分、四散碎屑 */
+function breakBrick(tx, row) {
+  map[row][tx] = T_EMPTY;
+  hitStopT = 0.035;
+  addScore(PTS_BRICK, tx * TILE, row * TILE - 8);
+  spawnBrickFragments(tx, row);
+  sfx('brick');
+}
+/** 被顶的砖把正上方的敌人震死（+100） */
+function brickKill(tx, row) {
+  const x0 = tx * TILE;
+  for (const e of enemies) {
+    if (e.dead || e.squashT > 0) continue;
+    if (Math.abs((e.y + e.h) - row * TILE) < 6 && e.x + e.w > x0 && e.x < x0 + TILE)
+      killEnemy(e, e.x + e.w / 2 < player.x + player.w / 2 ? -1 : 1, PTS_STOMP);
+  }
+}
+/** 砖块碎裂粒子 */
+function spawnBrickFragments(tx, row) {
+  for (let i = 0; i < 4; i++)
+    fxPush({ type: 'frag',
+      x: tx * TILE + 6 + (i % 2) * 12, y: row * TILE + 6 + ((i / 2) | 0) * 12,
+      vx: (i % 2 ? 1 : -1) * (90 + Math.random() * 70), vy: -(300 + Math.random() * 140),
+      t: 0, life: 0.5 });
+}
+
+/** 经过金币瓦片 → 拾取 +200 */
+function collectCoins() {
+  const p = player;
+  const L = Math.floor(p.x / TILE), R = Math.floor((p.x + p.w - 0.01) / TILE);
+  const Tt = Math.floor(p.y / TILE), B = Math.floor((p.y + p.h - 0.01) / TILE);
+  for (let ty = Tt; ty <= B; ty++) for (let tx = L; tx <= R; tx++)
+    if (tileAt(tx, ty) === T_COIN) {
+      map[ty][tx] = T_EMPTY;
+      /* Boss 房内所有拾币都进房内预算（独立于全局金币，出房时按规则折算） */
+      if (bossRoom.active) roomCoin(tx * TILE, ty * TILE - 6);
+      else gainCoin(tx * TILE, ty * TILE - 6, false);
+    }
+}
+
+/* AABB 相交判定 */
+function aabb(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/* ========================== 5. 道具 / 敌人 / 火球 ========================== */
+/** 从被顶的砖里出货：金币直接弹飞计分，蘑菇/火之花生成为道具实体（缓缓升起） */
+function spawnFromBlock(content, tx, row) {
+  if (content === 'coin') {
+    gainCoin(tx * TILE + 8, row * TILE - 26, true);
+    return;
+  }
+  const kind = content === 'flower' ? 'flower'
+             : (content === 'star' ? 'star'
+             : (content === '1up' ? 'oneup'
+             : (player.mode === 'small' ? 'mushroom' : 'flower')));   // power：按形态出货
+  items.push({
+    kind, x: tx * TILE + 4, y: row * TILE + 6, w: 24, h: 24,
+    vx: 0, vy: 0, onGround: false,
+    rise: 0.7, riseTo: row * TILE - 24,
+  });
+  sfx('sprout');
+}
+
+/** 道具更新：升起阶段无碰撞；蘑菇落地后沿地面滑动、撞壁回头；火之花静止 */
+function updateItem(it, dt) {
+  if (it.rise > 0) {
+    it.rise -= dt;
+    it.y = Math.max(it.riseTo, it.y - 46 * dt);
+    return;
+  }
+  if (it.kind !== 'flower') {
+    if (it.vx === 0) it.vx = it.kind === 'star' ? STAR_SPEED : ITEM_SPEED;
+    moveEntity(it, dt);
+    if (it.kind === 'star' && it.onGround) it.vy = -STAR_BOUNCE;   // 星星：落地弹跳
+  }
+  if (it.y > MAP_H * TILE + 40) it.gone = true;      // 掉坑回收
+}
+
+/** 道具拾取：蘑菇 小→大；火之花 →火力（小形态吃花直接变火力） */
+function itemCollect() {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it.gone) { items.splice(i, 1); continue; }
+    if (it.rise > 0 || !aabb(player, it)) continue;
+    if (it.kind === 'mushroom') {
+      if (player.mode === 'small') { setMode('big'); sfx('grow'); }
+      addScore(PTS_POWER, it.x, it.y - 8);
+    } else if (it.kind === 'oneup') {                 // 绿蘑菇 1UP
+      lives = Math.min(99, lives + 1);
+      fxPush({ type: 'text', x: it.x, y: it.y - 8, vy: -70, t: 0, life: 0.9, txt: '1UP', col: '#7ae048' });
+      sfx('oneup');
+    } else if (it.kind === 'star') {                  // 无敌星：进入闪烁无敌状态
+      player.starT = STAR_TIME;
+      addScore(PTS_POWER, it.x, it.y - 8);
+      sfx('star'); buzz(30);
+    } else {
+      if (player.mode !== 'fire') { setMode('fire'); sfx('grow'); buzz(30); }
+      addScore(PTS_POWER, it.x, it.y - 8);
+    }
+    items.splice(i, 1);
+  }
+}
+
+/** 敌人实体化：进入镜头视野右侧才生成 */
+function spawnEnemiesIfNeeded() {
+  if (world !== 'over') return;                     // 地下奖励房无敌人
+  for (const s of spawns) {
+    if (s.done || s.x > camX + VIEW_W + 96) continue;
+    s.done = true;
+    const h = (s.kind === 'koopa' || s.kind === 'para') ? 30 : 24;
+    enemies.push({
+      kind: s.kind, x: s.x, y: s.row * TILE - h, w: 24, h,
+      vx: (s.kind === 'koopa' || s.kind === 'para') ? -KOOPA_SPEED : -GOOMBA_SPEED,
+      vy: 0, onGround: false, squashT: 0, dead: false, runT: 0, red: !!s.red,
+    });
+  }
+}
+
+/** 敌人更新：直线行走、碰壁回头（moveEntity 内置）；被踩扁/击飞走各自轨迹 */
+function updateEnemy(e, dt) {
+  if (e.squashT > 0) { e.squashT += dt; return; }     // 被踩扁，等待消失
+  if (e.dead) {                                       // 被壳/火球击飞：翻倒坠落
+    e.vy += GRAVITY * dt;
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    return;
+  }
+  if (e.kind === 'shell' && Math.abs(e.vx) < 10) {    // 龟壳复苏：静止 3.6s 后晃动，再 1.4s 复活成乌龟
+    e.reviveT = (e.reviveT || 0) + dt;
+    if (e.reviveT > 3.6 && e.reviveT <= 5.0) e.wobbleT = (e.wobbleT || 0) + dt;
+    if (e.reviveT > 5.0) {
+      const bottom = e.y + e.h;
+      e.kind = 'koopa'; e.h = 30; e.y = bottom - 30; e.vx = -KOOPA_SPEED;
+      e.reviveT = 0; e.wobbleT = 0; e.runT = 0;
+    }
+  } else if (e.kind === 'shell') { e.reviveT = 0; e.wobbleT = 0; }   // 滑行中不计时
+  // 边缘折返：行走小怪（板栗仔/乌龟/跳跳龟）到坑边/平台边缘自动掉头巡逻，不掉坑（滑行龟壳除外，照飞）
+  // 跳跳龟额外在空中也判边缘：单跳位移≈40px 会越过岛缘，空中折返可落回台面
+  if ((e.kind === 'goomba' || e.kind === 'koopa' || e.kind === 'para') && (e.onGround || e.kind === 'para') && e.vx !== 0) {
+    const ax = e.vx > 0 ? Math.floor((e.x + e.w + 2) / TILE) : Math.floor((e.x - 2) / TILE);
+    if (e.onGround) e.footRow = Math.floor((e.y + e.h + 4) / TILE);    // 记住起飞行；空中沿用（顶点行会飘到空层）
+    const footRow = e.footRow !== undefined ? e.footRow : Math.floor((e.y + e.h + 4) / TILE);
+    if (!isSolid(ax, footRow)) e.vx = -e.vx;
+  }
+  if (e.kind === 'para' && e.onGround) {              // 跳跳龟：落地即弹起，沿平台循环跳跃
+    e.vy = -PARA_HOP_V; e.onGround = false;
+  }
+  moveEntity(e, dt);
+  if (Math.abs(e.vx) > 15) e.runT += e.kind === 'koopa' ? dt * Math.abs(e.vx) / 26 : dt * 6;
+  if (e.y > MAP_H * TILE + 80) e.gone = true;         // 掉坑回收
+}
+
+/** 敌人互撞：相向而行碰上 → 各自折返（滑行壳除外，它直接走击飞结算） */
+function enemyBounce() {
+  for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) {
+    const a = enemies[i], b = enemies[j];
+    if (a.dead || b.dead || a.squashT > 0 || b.squashT > 0) continue;
+    if ((a.kind === 'shell' && Math.abs(a.vx) > 100) || (b.kind === 'shell' && Math.abs(b.vx) > 100)) continue;
+    if (!aabb(a, b)) continue;
+    const l = a.x <= b.x ? a : b, r = a.x <= b.x ? b : a;   // 左边的向左、右边的向右弹开
+    if (l.vx > 0) l.vx = -Math.abs(l.vx);
+    if (r.vx < 0) r.vx = Math.abs(r.vx);
+  }
+}
+
+/** 滑行龟壳撞其他敌人 → 击飞 +400 */
+function shellHitsEnemies() {
+  for (const s of enemies) {
+    if (s.kind !== 'shell' || Math.abs(s.vx) < 100 || s.dead) continue;
+    for (const o of enemies) {
+      if (o === s || o.dead || o.squashT > 0 || o.kind === 'shell') continue;
+      if (aabb(s, o)) {
+        o.dead = true; o.vy = -300; o.vx = Math.sign(s.vx) * 120;
+        addScore(PTS_SHELL_KILL, o.x, o.y - 10);     // 壳撞敌固定 +400，不计入踩敌连击
+        sfx('stomp'); hitStopT = 0.035;
+      }
+    }
+  }
+}
+
+/** 敌人 × 玩家：上方踩踏 / 静止壳可踢 / 其余按状态机受伤 */
+function playerEnemyHits() {
+  for (const e of enemies) {
+    if (e.dead || e.squashT > 0 || !aabb(player, e)) continue;
+    if (player.starT > 0) {                            // 无敌星：接触即消灭，连杀走连击表
+      e.dead = true; e.vy = -300; e.vx = (player.x + player.w / 2 < e.x + e.w / 2 ? 1 : -1) * 140;
+      addStompScore(e.x, e.y - 10);
+      sfx('stomp'); hitStopT = 0.035;
+      continue;
+    }
+    // 踩踏判定：只要在“正在下落”(vy>40，比原 100 宽松，轻踩也能触发)且脚落在敌人上 60% 高度内
+    const stomp = player.vy > 40 && (player.y + player.h) - e.y < e.h * 0.6;
+    if (stomp) {
+      player.vy = input.jump ? -STOMP_BOUNCE_HELD : -STOMP_BOUNCE;
+      player.y = e.y - player.h;
+      buzz(16);                                        // 踩中实感（触屏事件反馈）
+      if (e.kind === 'goomba') {
+        e.squashT = 0.0001;
+        sfx('stomp'); hitStopT = 0.035; addStompScore(e.x, e.y - 10);
+      } else if (e.kind === 'para') {                 // 踩跳跳乌龟 → 折翼变红乌龟继续走（原版行为）
+        e.kind = 'koopa'; e.red = true;
+        sfx('stomp'); hitStopT = 0.035; addStompScore(e.x, e.y - 10);
+      } else if (e.kind === 'koopa') {                // 踩乌龟 → 变壳
+        const bottom = e.y + e.h;
+        e.kind = 'shell'; e.h = 18; e.y = bottom - 18; e.vx = 0;
+        sfx('stomp'); hitStopT = 0.035; addStompScore(e.x, e.y - 10);
+      } else {                                        // 踩壳：滑行→停，静止→踢飞
+        if (Math.abs(e.vx) > 10) e.vx = 0;
+        else { e.vx = (player.x + player.w / 2 < e.x + e.w / 2 ? 1 : -1) * SHELL_SPEED; sfx('kick'); }
+      }
+    } else if (e.kind === 'shell' && Math.abs(e.vx) < 10) {  // 侧面碰静止壳 → 踢飞
+      e.vx = (player.x + player.w / 2 < e.x + e.w / 2 ? 1 : -1) * SHELL_SPEED;
+      sfx('kick');
+    } else {
+      hurtPlayer();                                   // 滑行壳/敌人侧面碰撞 → 受伤
+    }
+  }
+}
+
+function killEnemy(e, dir, pts) {
+  e.dead = true; e.vy = -300; e.vx = dir * 140;
+  addScore(pts === undefined ? PTS_FIRE_KILL : pts, e.x, e.y - 10);
+  sfx('stomp'); hitStopT = 0.035;
+}
+
+/** 食人花实体：由当前关卡 pipes 中 plant:true 的水管生成，固定在管口中央（地上=管顶朝上，吊管=管底朝下） */
+const plants = [];
+function buildPlants() {
+  plants.length = 0;
+  for (const p of cur.pipes) {
+    if (!p.plant) continue;
+    const down = !!p.top;
+    const cx = (p.col + 1) * TILE;
+    const mouthY = down ? ((p.row !== undefined ? p.row : 2) + p.h) * TILE : (GROUND_ROW - p.h) * TILE;
+    plants.push({
+      col: p.col, cx, mouthY, down,
+      clock: Math.random() * PLANT_CYCLE,          // 多只随机错相位
+      exposed: 0, x: cx - PLANT_HIT_W / 2, y: mouthY, w: PLANT_HIT_W, h: 0,
+    });
+  }
+}
+buildPlants();
+loadLevel(0); map = overMap;                       // 初始即载入 1-1：标题有背景，避免首帧空地图（resetGame 会重载）
+
+/** 玩家是否站在该食人花所在水管的管口（横向含 2px 容差） */
+function playerOnPipe(pl) {
+  if (pl.down) return false;                        // 吊管管口在人够不到的上方，无“站口冻结”一说
+  if (!player.onGround) return false;
+  if (Math.abs(player.y + player.h - pl.mouthY) > 4) return false;
+  return player.x + player.w > pl.col * TILE - 2 && player.x < (pl.col + 2) * TILE + 2;
+}
+
+/** 四阶段伸缩：伸出 0.8s → 顶端停留 0.4s → 缩回 0.8s → 管内等待 0.6s（匀速 = “缓缓”）
+ *  玩家站上管口时冻结在“管内等待”起点并保持全缩回，离开后接着走完周期 */
+function updatePlants(dt) {
+  const WAIT_START = PLANT_T.rise + PLANT_T.hold + PLANT_T.fall;
+  for (const pl of plants) {
+    if (playerOnPipe(pl)) { pl.clock = WAIT_START; pl.exposed = 0; }
+    else {
+      pl.clock = (pl.clock + dt) % PLANT_CYCLE;
+      let c = pl.clock;
+      if (c < PLANT_T.rise)          pl.exposed = PLANT_RISE * (c / PLANT_T.rise);
+      else if ((c -= PLANT_T.rise) < PLANT_T.hold)   pl.exposed = PLANT_RISE;
+      else if ((c -= PLANT_T.hold) < PLANT_T.fall)   pl.exposed = PLANT_RISE * (1 - c / PLANT_T.fall);
+      else                                           pl.exposed = 0;
+    }
+    pl.x = pl.cx - PLANT_HIT_W / 2;
+    if (pl.down) { pl.y = pl.mouthY; pl.h = pl.exposed; }              // 吊管：自管口向下伸出
+    else { pl.y = pl.mouthY - pl.exposed; pl.h = pl.exposed; }
+  }
+}
+
+/** 食人花 × 玩家：伸出期间接触即受伤（不可踩、不可烧，故不参与 enemies 结算） */
+function plantHits() {
+  if (player.starT > 0) return;                    // 无敌星：穿过不受伤
+  for (const pl of plants) if (pl.exposed > 2 && aabb(player, pl)) { hurtPlayer(); break; }
+}
+
+/** 火球（火力形态，或 Boss 房买了「火球术」的小形态）：弹地前进，撞墙熄灭，命中敌人击飞 */
+function shootFireball() {
+  if (gameState !== 'play') return;
+  if (player.mode !== 'fire' && !(bossRoom.active && bossRoom.buffs.fireball)) return;
+  if (fireballs.length >= FIREBALL_MAX) return;
+  fireballs.push({
+    x: player.x + (player.facing > 0 ? player.w : -10), y: player.y + 10,
+    w: 10, h: 10, vx: player.facing * FIREBALL_SPEED, vy: 100, t: 0, onGround: false,
+  });
+  sfx('fire');
+}
+function updateFireballs(dt) {
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    const f = fireballs[i];
+    f.t += dt;
+    const ovx = f.vx;
+    moveEntity(f, dt);
+    if (f.onGround) f.vy = -380;                      // 弹地
+    if (ovx !== 0 && Math.sign(f.vx) !== Math.sign(ovx)) { fireballs.splice(i, 1); continue; }
+    for (const e of enemies) {
+      if (e.dead || e.squashT > 0) continue;
+      if (aabb(f, e)) {
+        if (e.kind === 'koopa') {                     // 火球打乌龟：翻倒成壳
+          const bottom = e.y + e.h;
+          e.kind = 'shell'; e.h = 18; e.y = bottom - 18; e.vx = 0; e.vy = 0; e.reviveT = 0; e.wobbleT = 0;
+          sfx('kick');
+        } else if (e.kind === 'shell') {              // 火球打壳：沿火球方向踢出
+          e.vx = Math.sign(f.vx) * SHELL_SPEED;
+          sfx('kick');
+        } else {
+          killEnemy(e, Math.sign(f.vx));
+        }
+        fireballs.splice(i, 1);
+        break;
+      }
+    }
+    if (fireballs[i] === f && world === 'over') {      // 火球烧食人花（原版可烧）
+      for (let pi = plants.length - 1; pi >= 0; pi--) {
+        const pl = plants[pi];
+        if (pl.exposed > 4 && aabb(f, pl)) {
+          plants.splice(pi, 1);
+          addScore(PTS_FIRE_KILL, pl.x, pl.y - 10);
+          sfx('kick');
+          fireballs.splice(i, 1);
+          break;
+        }
+      }
+    }
+    if (f.t > FIREBALL_LIFE || f.y > MAP_H * TILE + 40) fireballs.splice(i, 1);
+  }
+}
+
+/* ========================= 6. 状态机与特效（分数/生命/结算） ========================= */
+let coins = 0, score = 0, lives = START_LIVES;
+let hiScore = 0; try { hiScore = +(localStorage.getItem('pmario_hi') || 0) || 0; } catch (e) {}
+function saveHi() { if (score > hiScore) { hiScore = score; try { localStorage.setItem('pmario_hi', String(hiScore)); } catch (e) {} } }
+let gameState = 'title';               // 'title'|'play'|'pause'|'dying'|'pole'|'tohouse'|'flagup'|'tally'|'win'|'gameover'|'pipeIn'|'pipeOut'
+let gameTime = 0;
+let morphT = 0, morphFrom = 'small';   // 变身定格：>0 时全场暂停，角色新旧形态交替闪烁
+let deathByPit = false;                // 本次死亡是否摔坑（摔坑直接 Game Over）
+let castleFlagT = -1;                  // 城堡升旗进度（<0 未激活；进城堡后升起）
+let hitStopT = 0;                      // 打击顿帧（踩敌/碎砖瞬间微冻结，增强打击感）
+let titleSel = 0;                      // 标题界面选关指针（↑↓ 切换）
+const TITLE_MENU = { x0: 0, w: 380, h: 42, y0: 292, gap: 46 };   // 选关菜单几何（原版文字菜单风，x0 绘制时按 VIEW_W 居中）
+/* ---- 进度存档：解锁关卡数 + 每关最高分（localStorage 持久化） ---- */
+let progress = { unlocked: 1, best: {} };
+try {
+  const saved = JSON.parse(localStorage.getItem('pmario_progress') || 'null');
+  if (saved && saved.unlocked >= 1) progress = saved;
+} catch (_) {}
+function saveProgress() { try { localStorage.setItem('pmario_progress', JSON.stringify(progress)); } catch (_) {} }
+const levelLocked = i => i >= progress.unlocked;      // 第 i 关是否未解锁
+let levelStartScore = 0;                              // 本关起始分（算单关得分用）
+let hurry = false;                     // 剩余时间 ≤100 的 Hurry-up 状态
+let coinT = 0;
+let deathT = 0, poleT = 0, poleBonus = 0, flagProg = 0, timeBonus = 0;
+const effects = [];                    // {type:'coin'|'text'|'frag', ...}
+const FX_POOL  = [];                   // 特效对象池：死亡粒子回收复用，防 GC 抖动
+const bumps  = new Map();              // "tx,ty" -> {t} 砖块弹跳动画
+const multiBricks = new Map();         // "tx,ty" -> {left} 十金币砖剩余次数
+const starBricks = new Set();          // "tx,ty" 星星砖已出货标记：出货后还原为普通砖，防重复顶星
+let comboStreak = 0;                   // 连踩计数：不落地逐档升级，落地/受伤清零
+const enemies = [], items = [], fireballs = [];
+
+function bumpTile(tx, ty) { bumps.set(tx + ',' + ty, { t: 0 }); }
+/** 特效入池取用：优先复用回收对象 */
+function fxPush(o) {
+  const e = FX_POOL.pop() || {};
+  for (const k in o) e[k] = o[k];
+  effects.push(e);
+}
+
+function addScore(n, x, y) {
+  score += n;
+  if (x !== undefined) fxPush({ type: 'text', x, y, vy: -70, t: 0, life: 0.7, txt: '+' + n });
+}
+
+/** 得金币统一入口：+200 分 + 弹币特效 + 音效；集满 100 枚换 1UP（原版规则） */
+function gainCoin(x, y, pop) {
+  coins++;
+  addScore(PTS_COIN, x, y - (pop ? 8 : 0));
+  if (pop) fxPush({ type: 'coin', x, y, vy: -420, t: 0, life: 0.55 });
+  sfx('coin');
+  if (coins >= 100) {
+    coins -= 100; lives = Math.min(99, lives + 1);
+    sfx('oneup');
+    fxPush({ type: 'text', x, y: y - 24, vy: -70, t: 0, life: 1.2, txt: '100枚 1UP!', col: '#7ae048' });
+  }
+}
+
+/** 连踩计分：100→200→400→…→4000 封顶（COMBO_TABLE 八档）；空中不落地连击有效 */
+function addStompScore(x, y) {
+  comboStreak = Math.min(comboStreak + 1, COMBO_TABLE.length);
+  const pts = COMBO_TABLE[comboStreak - 1];
+  score += pts;
+  fxPush({ type: 'text', x, y, vy: -70, t: 0, life: 0.7,
+           txt: '+' + pts + (comboStreak > 1 ? ' ×' + comboStreak : '') });
+}
+
+/** 死亡：定身上跃 → 落出屏幕 → 扣命回重生点 / Game Over */
+function die(pitFall) {
+  if (gameState !== 'play') return;
+  gameState = 'dying'; deathT = 0; deathByPit = !!pitFall;
+  player.vy = pitFall ? -300 : -760;   // 摔坑时人已在屏外，小跳只为动画一致
+  player.vx = 0;
+  sfx('death');
+}
+function updateDying(dt) {
+  deathT += dt;
+  player.vy += GRAVITY * dt;
+  player.y += player.vy * dt;
+  if (deathT > 1.7) {
+    if (bossRoom.active) bossRoomFail();                  // Boss 房内死亡：先按房内规则结算（花费不退、余额折半），再走原有重生/GameOver
+    if (deathByPit) { saveHi(); gameState = 'gameover'; return; }   // 摔坑：直接 Game Over（用户规则）
+    lives--;
+    if (lives > 0 && gameTime < TIME_LIMIT) { respawnToCheckpoint(); gameState = 'play'; }
+    else { saveHi(); gameState = 'gameover'; }      // 命数耗尽或倒计时已归零 → 直接 Game Over
+  }
+}
+
+/** 碰到旗杆 → 抓杆下滑，按触碰高度给加成分 */
+function checkFlag() {
+  const p = player;
+  if (p.x + p.w < GOAL_COL * TILE + 10) return;
+  gameState = 'pole'; poleT = 0;
+  p.x = GOAL_COL * TILE + 8; p.vx = 0;
+  /* 原版四档：杆顶球区 5000 / 上 1/3 800 / 中 1/3 400 / 下 1/3 200（与 drawFlag 杆高 8 格对齐） */
+  const topY = GROUND_ROW * TILE - 8 * TILE, poleH = 8 * TILE;
+  if (p.y <= topY + TILE)                  poleBonus = 5000;
+  else if (p.y <= topY + poleH / 3)        poleBonus = 800;
+  else if (p.y <= topY + poleH * 2 / 3)    poleBonus = 400;
+  else                                     poleBonus = 200;
+  addScore(poleBonus, p.x, p.y - 10);
+  sfx('flag');
+}
+function updatePole(dt) {
+  poleT += dt;
+  player.y = Math.min(GROUND_ROW * TILE - player.h, player.y + POLE_SLIDE_V * dt);
+  flagProg = Math.min(1, flagProg + dt * 1.2);        // 旗子同步降下
+  if (poleT > 1.6 && player.y >= GROUND_ROW * TILE - player.h - 1) {
+    gameState = 'tohouse'; seqT = 0;                  // 滑到底 → 自动走向城堡
+  }
+}
+
+/* ---- 过关终幕：走进城堡 → 升旗+烟花 → 剩余时间×50 折算（自适应速率）→ 结算 ---- */
+let seqT = 0, fwT = 0, fwLeft = 0, fwTotal = 0, tallyAcc = 0, timeLeftInt = 0, tallyTotal = 0, tallySecAcc = 0;
+function updateToHouse(dt) {
+  const p = player;
+  p.facing = 1; p.vx = HOUSE_WALK_V; p.x += p.vx * dt;
+  p.y = GROUND_ROW * TILE - p.h; p.onGround = true;   // 落地状态：否则沿用抓杆时的 onGround=false，全程画成跳姿
+  p.runT += dt * 6;
+  if (p.x > (CASTLE_COL + 1.6) * TILE) {              // 走进门洞（城堡画在角色之上即“没入”）
+    p.vx = 0;
+    gameState = 'flagup'; seqT = 0; fwT = 0; castleFlagT = 0;   // 城堡升旗开始
+    timeLeftInt = Math.max(0, Math.ceil(TIME_LIMIT - gameTime));
+    const fd = timeLeftInt % 10;                        // 原版规则：剩余时间个位 1/3/6 → 对应发数烟花
+    fwLeft = fd === 1 ? 1 : fd === 3 ? 3 : fd === 6 ? 6 : 0;
+    fwTotal = fwLeft;
+  }
+}
+function updateFlagUp(dt) {
+  seqT += dt;
+  castleFlagT += dt;
+  flagProg = Math.max(0, flagProg - dt * 0.9);        // 旗子升回杆顶
+  fwT += dt;
+  if (fwT >= FIREWORK_INTERVAL && fwLeft > 0) { fwT = 0; fwLeft--; spawnFirework(); sfx('pop'); }
+  if (seqT > (fwTotal > 0 ? 2.2 : 1.1) && fwLeft === 0) { gameState = 'tally'; tallyAcc = 0; tallyTotal = timeLeftInt; tallySecAcc = 0; }
+}
+function updateTally(dt) {
+  // 自适应折算速率：整段固定 ~1.4s 放完（每秒 50 分不变），避免剩余秒数越多结算越拖沓
+  const perSec = Math.max(60, tallyTotal / 1.4);
+  tallySecAcc += dt * perSec;
+  const dec = Math.min(timeLeftInt, Math.floor(tallySecAcc));
+  if (dec > 0) { tallySecAcc -= dec; timeLeftInt -= dec; score += 50 * dec; timeBonus += 50 * dec; }
+  if (timeLeftInt <= 0) completeLevel();     // 折算放完：有下一关则保分换关，否则最终结算
+}
+/** 旗杆上空爆一朵 8 向烟花 */
+function spawnFirework() {
+  const cx = (GOAL_COL - 1 + Math.random() * 6) * TILE;
+  const cy = (3 + Math.random() * 4) * TILE;
+  const cols = ['#ff5a5a', '#ffd23f', '#7ae048', '#5ad0ff', '#ff9de2', '#ffffff'];
+  const col = cols[Math.random() * cols.length | 0];
+  for (let i = 0; i < FIREWORK_PARTS; i++) {
+    const a = i / FIREWORK_PARTS * Math.PI * 2, sp = 110 + Math.random() * 70;
+    fxPush({ type: 'firework', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+             t: 0, life: FIREWORK_LIFE, col });
+  }
+}
+
+/** 载入并开始第 idx 关的运行时状态：不动 score/lives/coins，供 resetGame 与通关换关共用 */
+function startLevel(idx) {
+  loadLevel(idx);                            // 写入 MAP_W/GOAL_COL/CASTLE_COL/TIME_LIMIT/LEVEL_NAME + overMap/underMap/spawns
+  map = overMap; world = 'over';
+  gameTime = 0;
+  deathT = 0; poleT = 0; poleBonus = 0; flagProg = 0; timeBonus = 0;
+  multiBricks.clear(); starBricks.clear(); bumps.clear();
+  comboStreak = 0; seqT = 0; fwLeft = 0; fwTotal = 0; morphT = 0; hurry = false; deathByPit = false;
+  castleFlagT = -1;
+  while (effects.length) FX_POOL.push(effects.pop());
+  if (bossRoom.active) closeBossRoom(false);          // 换关/重开：关闭 Boss 房，防残留状态污染地上世界
+  enemies.length = 0; items.length = 0; fireballs.length = 0;
+  buildPlants();
+  player.mode = 'small'; player.w = PLAYER_W; player.h = PLAYER_H; player.invulnT = 0; player.starT = 0; player.crouch = false;
+  levelStartScore = score;                         // 记录本关起始分（过关时算单关得分入档）
+  checkpoint = { x: SPAWN.x, y: SPAWN.y };
+  respawn();
+  camX = Math.max(0, Math.min(checkpoint.x + player.w / 2 - VIEW_W * 0.42, MAP_W * TILE - VIEW_W));   // 相机归位：防上一关残位导致新关敌人按旧镜头错生成/错裁剪
+  gameState = 'play';
+}
+/** 整局重开：归零分数/生命/金币后从第 1 关开始 */
+function resetGame() {
+  levelIdx = titleSel;                             // 从标题所选关卡开始
+  coins = 0; score = 0; lives = START_LIVES;
+  startLevel(titleSel);
+}
+/** 通关推进：还有下一关则保分换关，否则进入最终结算 */
+function completeLevel() {
+  const gained = score - levelStartScore;            // 本关单关得分（含时间加成）
+  progress.best[levelIdx] = Math.max(progress.best[levelIdx] || 0, gained);
+  progress.unlocked = Math.max(progress.unlocked, Math.min(LEVELS.length, levelIdx + 2));
+  saveProgress();
+  if (levelIdx < LEVELS.length - 1) { startLevel(levelIdx + 1); sfx('win'); }
+  else { gameState = 'win'; saveHi(); sfx('win'); }
+}
+
+/* ---- 地下奖励房：按 ↓ 入管 → 滑入动画 → 切世界；右侧横管走出 → 回地上出口管 ---- */
+function tryEnterPipe() {
+  if (world !== 'over' || !input.down || !player.onGround) return;
+  for (const p of cur.pipes) {
+    if (p.enter === undefined) continue;              // enter = 目标奖励房索引（0 合法，故用 undefined 判缺省）
+    if (Math.abs(player.y + player.h - (GROUND_ROW - p.h) * TILE) > 4) continue;   // 必须站在管口
+    if (player.x + player.w > p.col * TILE - 2 && player.x < (p.col + 2) * TILE + 2) {
+      if (player.crouch) {                          // 入管前先起身（原版蹲着入管，起身防卡碰撞盒）
+        const bottom = player.y + player.h;
+        player.crouch = false; player.h = BIG_H; player.y = bottom - BIG_H;
+      }
+      roomIdx = p.enter | 0;
+      gameState = 'pipeIn'; seqT = 0;
+      player.x = (p.col + 1) * TILE - player.w / 2; // 对齐管口中央
+      player.vx = 0; player.vy = 0;
+      sfx('pipe');
+      return;
+    }
+  }
+}
+function updatePipeIn(dt) {
+  seqT += dt; gameTime += dt;
+  player.y += 90 * dt;                               // 沿管壁下滑（渲染侧同步渐隐）
+  if (seqT > 0.85) enterBonusRoom();
+}
+function enterBonusRoom() {
+  const room = cur.unders[roomIdx];
+  /* Boss 房每次进入都重建地图：房内会吃掉金币瓦片、把商店砖顶成已用砖，
+   * 重进必须拿到干净的预算与货架（否则“反复进出”直接失去可买资源） */
+  if (room.type === 'boss') underMaps[roomIdx] = buildBossRoomMap();
+  world = 'under'; map = underMaps[roomIdx]; MAP_W = room.w; camX = 0;
+  enemies.length = 0; items.length = 0; fireballs.length = 0;
+  player.x = 2 * TILE; player.y = GROUND_ROW * TILE - player.h;
+  player.vx = 0; player.vy = 0;
+  player.invulnT = Math.max(player.invulnT, 1.0);
+  morphT = 0;
+  if (room.type === 'boss') enterBossRoom();           // 资源管理 Boss 房：强变小 + 发房内资金 + 生成 Boss
+  gameState = 'play';
+}
+/** 地下右侧横管出口：走到管口右行 → 滑入横管 → 回本房 exitCol 的出口管（出口管须为 h2） */
+function checkExitPipeTrigger() {
+  if (world !== 'under' || !player.onGround) return;
+  if (bossRoom.active) return;                         // Boss 房出口在入口横管（按 ↓ 主动退出），右行不出房
+  const ex = (cur.unders[roomIdx].w - 4) * TILE;
+  if (player.x + player.w / 2 > ex + 10 && (input.right || player.vx > 20)) {
+    gameState = 'pipeOut'; seqT = 0;
+    player.vx = 0; player.vy = 0;
+    sfx('pipe');
+  }
+}
+function updatePipeOut(dt) {
+  seqT += dt; gameTime += dt;
+  player.facing = 1; player.x += 95 * dt; player.runT += dt * 6;
+  if (seqT > 0.7 || player.x > (cur.unders[roomIdx].w - 3) * TILE) exitBonusRoom();
+}
+function exitBonusRoom() {
+  if (bossRoom.active) closeBossRoom(true);              // Boss 房：出房即清除房内能力并恢复原形态
+  world = 'over'; map = overMap; MAP_W = cur.w;
+  const ec = cur.unders[roomIdx].exitCol;
+  player.x = (ec + 1) * TILE - player.w / 2;          // 出口管口中央
+  player.y = (GROUND_ROW - 2) * TILE - player.h;
+  player.vx = 0; player.vy = 0;
+  player.invulnT = Math.max(player.invulnT, 1.0);
+  for (const s of spawns) if (s.col < ec + 3) s.done = true;   // 身后的敌人不再补生成
+  checkpoint = { x: player.x, y: player.y };
+  camX = Math.max(0, Math.min(player.x + player.w / 2 - VIEW_W * 0.42, MAP_W * TILE - VIEW_W));
+  gameState = 'play';
+}
+
+/* ==================== 6.5 资源管理 Boss 奖励房 ====================
+ * 设计目的：把金币从“分数/1UP 货币”变成可支配的战斗资源。玩家带着固定预算（100）
+ * 在「买能力压低战斗难度」与「留金币换结算收益」之间取舍，因此三条约束缺一不可：
+ *   ① 房内金币独立结算（不与全局 coinCount 混记）→ 预算才有意义；
+ *   ② 能力仅房内有效（出房即清除）→ 不能变成永久数值膨胀；
+ *   ③ 死亡不退还已花费、余额只折 50% → 风险真正存在。
+ * 无敌只免疫伤害、不直接杀掉 Boss：否则“防御型商品”严格优于“攻击型商品”，取舍消失。
+ * ================================================================== */
+const BOSS_MAX_HP = 5;             // 踩头/火球各扣 1 血
+const BR_INVINCIBLE_T = 8;         // 无敌持续（秒）
+const BR_SHOP_RESPAWN_T = 10;      // 可重复购买砖的恢复冷却（秒）
+const BR_COIN_DROP_T = 3;          // 战斗中金币雨间隔（秒）
+const BR_HAMMER_LIFE = 5;          // 锤子存在时长（秒）
+const BOSS_STUN_T = 1, BOSS_HURT_T = 0.3, BOSS_DEAD_T = 2;
+const BR_SPEED_MUL = 1.3;          // 加速跑倍率
+
+/* 房内运行时状态（单实例：一次只可能在一间房内，无需对象池） */
+const bossRoom = {
+  active: false, state: '', seqT: 0, coins: 0, origMode: 'small', pending: null,
+  buffs: { doubleJump: false, invincible: 0, speedBoost: false, fireball: false, canDoubleJump: true },
+  shop: {}, boss: null, hammers: [], drops: [], dropT: 0,
+  atHome: false, msg: null, msgT: 0, quitT: 0, downArmed: false,
+};
+
+/** 房内提示（出房后仍短暂可见，用于承载结算反馈） */
+function roomMsg(txt, sec) { bossRoom.msg = txt; bossRoom.msgT = sec; }
+
+/** 形态直切：不走 setMode/shrinkToSmall，避免出房瞬间被变身定格与无敌帧干扰 */
+function setRoomMode(m) {
+  const bottom = player.y + player.h;
+  player.mode = m; player.crouch = false;
+  if (m === 'small') { player.w = PLAYER_W; player.h = PLAYER_H; }
+  else { player.w = BIG_W; player.h = BIG_H; }
+  player.y = bottom - player.h;
+}
+
+/** 入房：存档原形态 → 强制变小 → 发房内资金 → 清空能力与商品状态 */
+function enterBossRoom() {
+  const B = bossRoom;
+  B.active = true; B.state = 'enter'; B.seqT = 0; B.quitT = 0; B.downArmed = false;
+  B.coins = BR_INIT_COINS; B.origMode = player.mode; B.pending = null;
+  B.buffs = { doubleJump: false, invincible: 0, speedBoost: false, fireball: false, canDoubleJump: true };
+  B.shop = {};
+  for (const it of BR_SHOP) B.shop[it.col] = { bought: false, respawnT: 0, flashT: 0 };
+  B.hammers.length = 0; B.drops.length = 0; B.dropT = 0; B.atHome = false;
+  B.boss = { x: 36 * TILE, y: GROUND_ROW * TILE - 48, w: 32, h: 48, vx: 0, vy: 0,
+             hp: BOSS_MAX_HP, maxHp: BOSS_MAX_HP, phase: 1, facing: -1, state: 'idle',
+             atkCd: 1.2, fireCd: 5, act: 0, stunT: 0, hurtT: 0, deadT: 0, runT: 0, flame: null };
+  setRoomMode('small');                              // 强制变小：把“形态”也变成可交易的资源
+  player.invulnT = Math.max(player.invulnT, 0.6);
+  roomMsg('资源管理 Boss 房！用金币买能力，击败 Boss！', 3);
+  sfx('star');
+}
+
+/** 出房清理：房内能力一律作废；restore=true 时恢复原形态并发放稀有奖励（死亡路径由 respawnToCheckpoint 统一重置） */
+function closeBossRoom(restore) {
+  const B = bossRoom;
+  B.buffs = { doubleJump: false, invincible: 0, speedBoost: false, fireball: false, canDoubleJump: true };
+  B.hammers.length = 0; B.drops.length = 0; B.boss = null;
+  if (restore) {
+    setRoomMode(B.origMode);
+    if (B.pending === 'flower' && player.mode !== 'fire') { setRoomMode('fire'); sfx('grow'); roomMsg('奖励：火之花！', 2); }
+    else if (B.pending === 'star') { player.starT = STAR_TIME; sfx('star'); roomMsg('奖励：无敌星！', 2); }
+  }
+  B.pending = null; B.active = false; B.state = ''; B.coins = 0; B.atHome = false;
+}
+
+/** 房内金币折算入全局：按原版口径计分，集满 100 枚照常换 1UP */
+function settleRoomCoins(n) {
+  if (n <= 0) return;
+  coins += n; score += n * PTS_COIN;
+  while (coins >= 100) { coins -= 100; lives = Math.min(99, lives + 1); sfx('oneup'); }
+}
+
+/** 房内拾币统一入口：只加房内余额，不触碰全局 coins */
+function roomCoin(x, y) {
+  bossRoom.coins++;
+  fxPush({ type: 'coin', x, y, vy: -360, t: 0, life: 0.5 });
+  sfx('coin');
+}
+
+/* ---- 商店：顶起 T_SHOP 砖 = 购买（余额不足只闪价不扣钱） ---- */
+function buyShopItem(col, row) {
+  const B = bossRoom, it = BR_SHOP.find(s => s.col === col);
+  if (!it) return;
+  const st = B.shop[col] || (B.shop[col] = { bought: false, respawnT: 0, flashT: 0 });
+  bumpTile(col, row);
+  if (st.bought) { sfx('bump'); return; }
+  if (B.coins < it.price) {
+    st.flashT = 1; sfx('bump');                              // 余额不足：闷响 + 价格闪红 1 秒
+    roomMsg(it.name + ' 需要 ' + it.price + ' 金币（现有 ' + B.coins + '）', 1.6);
+    return;
+  }
+  B.coins -= it.price;
+  applyBuff(it.key);
+  sfx('grow'); buzz(20); hitStopT = 0.03;
+  fxPush({ type: 'text', x: col * TILE + 2, y: (row + 1) * TILE + 14, vy: -70, t: 0, life: 1,
+           txt: '-' + it.price, col: '#ffd23f' });
+  map[row][col] = T_QUSED; st.bought = true;
+  if (it.repeat) st.respawnT = BR_SHOP_RESPAWN_T;            // 无敌砖 10 秒后恢复可购（可续命）
+}
+function applyBuff(k) {
+  const bf = bossRoom.buffs;
+  if (k === 'invincible') bf.invincible = BR_INVINCIBLE_T;    // 重复购买：刷新为满 8 秒
+  else bf[k] = true;
+  if (k === 'doubleJump') bf.canDoubleJump = true;
+}
+
+/* ---- Boss 战 ---- */
+/** 扔锤：阶段 3 固定双发，其余 1-2 发随机（越贴近越难躲，故给最短距离阈值） */
+function throwHammers(b) {
+  const n = b.phase >= 3 ? 2 : 1 + (Math.random() < 0.5 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    bossRoom.hammers.push({
+      x: b.x + (b.facing > 0 ? b.w - 6 : -10), y: b.y + 4, w: 16, h: 16,
+      vx: b.facing * (150 + i * 70 + Math.random() * 40), vy: -430 - Math.random() * 60,
+      rot: 0, life: BR_HAMMER_LIFE, bounce: 0,
+    });
+  }
+  sfx('kick');
+}
+/** 逃跑惩罚：激活后退回商店区 → Boss 回初始位并回血 1 格（最多回满），杜绝反复进出磨血 */
+function retreatBoss() {
+  const B = bossRoom, b = B.boss;
+  b.x = 36 * TILE; b.vx = 0; b.flame = null; b.act = 0; b.stunT = 0; b.atkCd = 1;
+  b.hp = Math.min(b.maxHp, b.hp + 1);
+  B.hammers.length = 0; B.atHome = true;
+  roomMsg('库巴退回巢穴并恢复 1 格血量', 2);
+  sfx('bump');
+}
+/** Boss 掉血：踩头 → 眩晕 1 秒 + 玩家反弹；火球 → 硬直 0.3 秒 */
+function bossDamage(kind) {
+  const B = bossRoom, b = B.boss;
+  if (!b || b.state === 'dead') return;
+  b.hp--; b.hurtT = 0.2;
+  if (kind === 'stomp') { b.stunT = BOSS_STUN_T; b.state = 'stunned'; player.vy = -400; sfx('stomp'); }
+  else { b.stunT = BOSS_HURT_T; b.state = 'hurt'; sfx('kick'); }
+  hitStopT = 0.05; buzz(24);
+  addScore(PTS_STOMP, b.x, b.y - 10);
+  if (b.hp <= 0) { b.state = 'dead'; b.deadT = 0; b.stunT = 0; b.flame = null; sfx('pop'); }
+}
+/** 胜利结算：余额 ×2 入全局 + 1UP + 稀有奖励（出房瞬间生效），3 秒后自动出房 */
+function bossVictory() {
+  const B = bossRoom, b = B.boss;
+  B.state = 'clear'; B.seqT = 0;
+  B.hammers.length = 0; B.drops.length = 0; if (b) b.flame = null;
+  settleRoomCoins(B.coins * 2);
+  B.coins = 0;                                          // 余额已结清，防“结算后再死亡”二次折算
+  lives = Math.min(99, lives + 1);
+  B.pending = Math.random() < 0.5 ? 'flower' : 'star';
+  if (b) for (let i = 0; i < 18; i++) {                // 烟花：绕 Boss 中心 18 向爆开
+    const a = i / 18 * Math.PI * 2, sp = 110 + Math.random() * 80;
+    fxPush({ type: 'firework', x: b.x + b.w / 2, y: b.y + 10, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+             t: 0, life: FIREWORK_LIFE, col: ['#ffd23f', '#ff5a5a', '#7ae048', '#5ad0ff'][i % 4] });
+  }
+  roomMsg('BOSS 击破！剩余金币 ×2 + 1UP', 3);
+  stinger('bossWin');                                  // 专属击破动机（不复用过关 sfx('win')，避免与每关结算撞车）
+}
+/** 死亡结算：已花费不退还，余额 50% 折算（updateDying 在重生前调用） */
+function bossRoomFail() {
+  const B = bossRoom;
+  if (!B.active) return;
+  if (B.state === 'clear' || B.state === 'leave') { closeBossRoom(false); return; }   // 已结清：只清理，不二次折算
+  B.state = 'dead';
+  const back = Math.floor(B.coins * 0.5);
+  settleRoomCoins(back); B.coins = 0;
+  closeBossRoom(false);
+  roomMsg('挑战失败… 剩余金币 50% 返还 ' + back + ' 枚', 2.5);
+  stinger('bossLose');                                 // 死亡音早在 1.7 秒前放完，这里补失败动机
+}
+
+/** 金币雨：战斗期间每 3 秒从天花板掉 3-5 枚（只计房内余额，落地静止 1 秒即消失） */
+function spawnCoinRain() {
+  const B = bossRoom, n = 3 + (Math.random() * 3 | 0);
+  for (let i = 0; i < n; i++) {
+    const col = BR_ARENA_COL + 1 + (Math.random() * 13 | 0);   // 竞技场随机列 26~38
+    B.drops.push({ x: col * TILE + 6, y: 2 * TILE, w: 20, h: 28, vy: 0, rest: 0 });
+  }
+  if (B.drops.length > 10) B.drops.splice(0, B.drops.length - 10);                   // 池上限 10
+}
+
+/** 锤子：重力抛物线 + 落地反弹 2 次 + 撞墙/超时消失；玩家不可踩（旋转有刃，接触即伤） */
+function updateHammers(dt) {
+  const B = bossRoom;
+  for (let i = B.hammers.length - 1; i >= 0; i--) {
+    const h = B.hammers[i];
+    h.life -= dt; h.vy = Math.min(h.vy + GRAVITY * dt, MAX_FALL);
+    h.x += h.vx * dt; h.y += h.vy * dt; h.rot += dt * 11;
+    const midRow = Math.floor((h.y + h.h / 2) / TILE);
+    if (isSolid(Math.floor(h.x / TILE), midRow) || isSolid(Math.floor((h.x + h.w) / TILE), midRow) || h.life <= 0) {
+      B.hammers.splice(i, 1); continue;
+    }
+    if (h.vy > 0) {
+      const row = Math.floor((h.y + h.h) / TILE);
+      if (isSolid(Math.floor((h.x + h.w / 2) / TILE), row)) {
+        if (++h.bounce > 2) { B.hammers.splice(i, 1); continue; }
+        h.y = row * TILE - h.h; h.vy = -440; sfx('bump');
+      }
+    }
+    if (aabb(player, h)) {
+      B.hammers.splice(i, 1);
+      if (B.buffs.invincible > 0) sfx('kick');           // 无敌：撞碎锤子
+      else hurtPlayer();
+    }
+  }
+}
+function updateDrops(dt) {
+  const B = bossRoom;
+  for (let i = B.drops.length - 1; i >= 0; i--) {
+    const d = B.drops[i];
+    if (d.rest > 0) { d.rest -= dt; if (d.rest <= 0) B.drops.splice(i, 1); continue; }
+    d.vy = Math.min(d.vy + GRAVITY * dt, MAX_FALL); d.y += d.vy * dt;
+    const row = Math.floor((d.y + d.h) / TILE);
+    if (d.vy > 0 && isSolid(Math.floor((d.x + d.w / 2) / TILE), row)) { d.y = row * TILE - d.h; d.vy = 0; d.rest = 1; }
+    if (aabb(player, d)) { B.drops.splice(i, 1); roomCoin(d.x, d.y - 6); }
+  }
+}
+
+/** Boss AI：idle/chase/throwHammer/breatheFire/stunned/dead；阶段只随血量升，不随回血降 */
+function updateBossFight(dt) {
+  const B = bossRoom, b = B.boss, p = player;
+  if (!b) return;
+  if (b.hurtT > 0) b.hurtT = Math.max(0, b.hurtT - dt);
+  if (b.state === 'dead') { b.deadT += dt; b.vx = 0; if (b.deadT > BOSS_DEAD_T) bossVictory(); return; }
+  const wantPhase = b.hp >= 3 ? 1 : (b.hp === 2 ? 2 : 3);
+  if (wantPhase > b.phase) {
+    b.phase = wantPhase;
+    roomMsg('Boss 狂暴了！', 2); sfx('hurry');           // 阶段 2 解锁喷火、速度+25%、攻击更密
+  }
+  const dx = (p.x + p.w / 2) - (b.x + b.w / 2), adx = Math.abs(dx);
+  b.facing = dx < 0 ? -1 : 1;
+  b.atkCd = Math.max(0, b.atkCd - dt); b.fireCd = Math.max(0, b.fireCd - dt);
+  if (b.stunT > 0) { b.stunT -= dt; b.vx = 0; b.flame = null; if (b.stunT <= 0) b.state = 'chase'; }
+  else if (b.act > 0) {                                 // 动作进行中：定身（喷火/扔锤的“停下”代价）
+    b.act -= dt; b.vx = 0;
+    if (b.act <= 0) { b.state = 'chase'; b.flame = null; }
+  } else if (b.phase >= 2 && b.fireCd <= 0 && adx > TILE && adx < 5.6 * TILE) {
+    b.state = 'breatheFire'; b.act = 1; b.fireCd = 4; b.vx = 0; sfx('fire');
+  } else if (b.atkCd <= 0 && adx > 70) {
+    b.state = 'throwHammer'; b.act = 0.4; b.atkCd = 3 - b.phase * 0.5; throwHammers(b);
+  } else {
+    b.state = 'chase';
+    b.vx = (adx > 44 ? Math.sign(dx) : 0) * (60 + b.phase * 20);
+    b.runT += dt * 6;
+    if (b.phase >= 3 && b.atkCd <= 0) { throwHammers(b); b.atkCd = 3 - b.phase * 0.5; }   // 阶段3：移动中也能扔
+  }
+  b.x += b.vx * dt;
+  b.x = Math.max(BR_ARENA_COL * TILE, Math.min((BR_W - 2) * TILE - b.w, b.x));
+  b.y = GROUND_ROW * TILE - b.h;                        // Boss 不跳台：两座高台是玩家的躲避位
+  /* 直线火焰（长 5 格）：贴脸威胁，无敌可穿、其余按受击 */
+  b.flame = (b.state === 'breatheFire' && b.stunT <= 0)
+    ? { x: b.facing > 0 ? b.x + b.w - 6 : b.x - 5 * TILE + 6, y: b.y + 11, w: 5 * TILE, h: 16 }
+    : null;
+  if (b.flame && aabb(p, b.flame) && !(B.buffs.invincible > 0)) hurtPlayer();
+  /* 身体接触：只有踩踏掉血；侧面接触受击（无敌时免疫但不掉血） */
+  if (p.invulnT <= 0 && aabb(p, b)) {
+    const stomp = p.vy > 40 && (p.y + p.h) - b.y < 16;
+    if (stomp) { p.y = b.y - p.h; p.onGround = false; bossDamage('stomp'); }
+    else if (B.buffs.invincible <= 0) hurtPlayer();
+  }
+  /* 火球命中（集中在此判定，避免改动 updateFireballs） */
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    const f = fireballs[i];
+    if (aabb(f, b)) { fireballs.splice(i, 1); bossDamage('fire'); }
+  }
+  /* 金币雨计时 */
+  B.dropT += dt;
+  if (B.dropT >= BR_COIN_DROP_T) { B.dropT = 0; spawnCoinRain(); }
+}
+
+/** 主动退出：滑进入口横管，余额 50% 折算、不触发 Boss 战 */
+function startBossRoomLeave() {
+  const B = bossRoom;
+  B.state = 'leave'; B.seqT = 0;
+  player.vx = 0; player.vy = 0;
+  const back = Math.floor(B.coins * 0.5);
+  settleRoomCoins(back); B.coins = 0;
+  roomMsg('主动退出：余额 50% 折算 ' + back + ' 枚', 2.5);
+  sfx('pipe');
+}
+
+/** 房内主更新：状态机 + 各子系统（由 update() 在 play 分支内调用） */
+function updateBossRoom(dt) {
+  const B = bossRoom;
+  if (!B.active) return;
+  if (B.buffs.invincible > 0) B.buffs.invincible = Math.max(0, B.buffs.invincible - dt);
+  for (const key in B.shop) {                           // 商品砖的闪红计时与恢复冷却
+    const s = B.shop[key];
+    if (s.flashT > 0) s.flashT = Math.max(0, s.flashT - dt);
+    if (s.respawnT > 0) {
+      s.respawnT -= dt;
+      if (s.respawnT <= 0) { s.bought = false; map[BR_SHOP_ROW][+key] = T_SHOP; sfx('sprout'); }
+    }
+  }
+  if (B.state === 'enter') { B.seqT += dt; if (B.seqT > 0.5) B.state = 'shop'; }
+  else if (B.state === 'clear') { B.seqT += dt; if (B.seqT > 3) exitBonusRoom(); return; }
+  else if (B.state === 'leave') {
+    B.seqT += dt; player.vx = 0; player.facing = -1; player.x -= 90 * dt; player.runT += dt * 6;
+    if (B.seqT > 0.7) exitBonusRoom();
+    return;
+  }
+  const pcol = Math.floor((player.x + player.w / 2) / TILE);
+  /* 主动退出：入口区站稳按 ↓ 0.5 秒；downArmed 要求先松开一次，杜绝入房瞬间沿用入管按键误触 */
+  if (!input.down) B.downArmed = true;
+  const canQuit = (B.state === 'shop' || B.state === 'boss') && player.onGround && pcol <= BR_EXIT_ARM_COL;
+  if (canQuit && input.down && B.downArmed) { B.quitT += dt; if (B.quitT > 0.5) startBossRoomLeave(); }
+  else if (!canQuit) B.quitT = 0;
+  /* 竞技场激活 / 回巢惩罚 */
+  if (B.state === 'shop' && pcol >= BR_ARENA_COL) {
+    B.state = 'boss'; B.atHome = false;
+    if (B.boss) { B.boss.state = 'idle'; B.boss.act = 0.5; }   // 开场 0.5 秒站立观察（规格 idle 档）
+    roomMsg('库巴苏醒了！', 2); sfx('hurry');
+  } else if (B.state === 'boss') {
+    if (pcol >= BR_ARENA_COL) B.atHome = false;
+    else if (!B.atHome && B.boss && B.boss.hp > 0 && B.boss.state !== 'dead') retreatBoss();
+  }
+  if (B.state === 'boss') {
+    if (B.atHome) {                                      // 玩家已退出竞技场：钉回巢穴，战斗暂停（不追/不打/不掉金币）
+      const b = B.boss;
+      if (b && b.state !== 'dead') { b.x = 36 * TILE; b.y = GROUND_ROW * TILE - b.h; b.vx = 0; b.state = 'idle'; b.act = 0; b.flame = null; }
+    } else {
+      updateBossFight(dt); updateHammers(dt); updateDrops(dt);
+    }
+  }
+}
+
+/* ---- Boss 房绘制：库巴 / 锤子 / 火焰 / 入口横管（纯程序化像素，与全游戏零外链素材一致） ---- */
+function drawBowser(b) {
+  const sx = Math.round(b.x - camX), sy = Math.round(b.y);
+  if (sx < -64 || sx > VIEW_W + 64) return;
+  const dead = b.state === 'dead';
+  ctx.save();
+  ctx.translate(sx + (b.facing > 0 ? 0 : b.w), sy);
+  ctx.scale(b.facing > 0 ? 1 : -1, 1);                  // 素材朝右：朝左时镜像（与 drawEnemy 同法）
+  if (dead) {                                           // 死亡：缩小消失 + 全身转红
+    const k = Math.max(0.15, 1 - b.deadT / BOSS_DEAD_T);
+    ctx.translate(b.w / 2, b.h); ctx.scale(k, k); ctx.translate(-b.w / 2, -b.h);
+  } else if (b.hurtT > 0 && Math.floor(b.hurtT * 24) % 2 === 0) ctx.globalAlpha = 0.5;
+  const C = c => dead ? '#d82800' : c;
+  const px = (x, y, w, h, c) => {                     // 部件 = 黑描边 + 本体填色（与角色/敌人素材同风格）
+    if (!dead) rect(ctx, x - 1, y - 1, w + 2, h + 2, '#000000');
+    rect(ctx, x, y, w, h, C(c));
+  };
+  const G = '#00a800', D = '#005800', T = '#fcd8a8', Y = '#e8a000',
+        R = '#d82800', W = '#fcfcfc', M = '#7c0800', O = '#ff8000';
+  const step = (b.state === 'chase' && Math.abs(b.vx) > 10) ? (Math.floor(b.runT) % 2) : 0;
+  const bob = (b.state === 'throwHammer' || b.state === 'breatheFire') ? -2 : 0;
+  ctx.translate(0, bob);
+  px(-6, 28, 9, 6, D);                                // 尾（压暗，藏在甲后）
+  px(0, 16, 17, 21, D);                               // 背甲（深绿大块）
+  px(1, 12, 4, 5, W); px(6, 12, 4, 5, W); px(11, 12, 4, 5, W);       // 甲顶缘三根白刺（唯一白色排）
+  px(2, 22, 3, 3, Y); px(7, 26, 3, 3, Y);             // 甲纹
+  px(10, 6, 7, 12, R);                                // 红鬃毛：头与甲之间的色块分隔
+  px(14, 22, 9, 15, T); px(15, 27, 7, 2, Y); px(15, 32, 7, 2, Y);    // 胸甲（米色 + 两道纹）
+  px(3, 37, 8, 9 - step * 2, G); px(1, 44 - step * 2, 12, 4, '#000000');   // 后腿 + 黑脚掌
+  px(16, 37, 9, 7 + step * 2, G); px(14, 42 + step * 2, 13, 4, '#000000'); // 前腿 + 黑脚掌
+  px(2, 44 - step * 2, 2, 3, W); px(9, 44 - step * 2, 2, 3, W);      // 后爪
+  px(15, 42 + step * 2, 2, 3, W); px(23, 42 + step * 2, 2, 3, W);    // 前爪
+  px(21, 25 + step * 2, 9, 5, G); px(28, 26 + step * 2, 3, 4, W);    // 前臂 + 爪
+  px(14, 2, 18, 18, G);                               // 头（前移且更大）
+  px(16, -3, 4, 6, W); px(23, -3, 4, 6, W);           // 双角（只在头顶）
+  px(24, 11, 8, 8, T); px(24, 16, 8, 3, M);           // 口鼻 + 口腔
+  px(25, 15, 2, 2, W); px(29, 15, 2, 2, W);           // 獠牙
+  px(19, 6, 6, 5, W); px(22, 7, 3, 3, '#000000');     // 白眼 + 黑瞳
+  if (b.state === 'breatheFire') px(30, 15, 6, 5, O); // 喷火：口腔火光（长条火焰由 drawBossFlame 接续）
+  if (b.stunT > 0 && !dead) {                         // 眩晕：眼睛打叉
+    rect(ctx, 19, 8, 6, 1, '#000000'); rect(ctx, 21, 5, 1, 7, '#000000');
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+/** 直线火焰：从嘴部向外逐段变窄的双层火舌（外橙内黄 + 高低抖动），按 Boss 朝向定宽端 */
+function drawBossFlame(b) {
+  const f = b.flame, seg = 10, sw = f.w / seg;
+  const ph = Math.floor(gameTime * 16) % 2 ? 1 : -1;
+  const cy = f.y + f.h / 2, x0 = Math.round(f.x - camX);
+  for (let i = 0; i < seg; i++) {
+    const t = i / (seg - 1);                           // 0=嘴部（最粗）→ 1=末端（最细）
+    const h = Math.max(4, f.h * (1 - t * 0.7) + ph * (i % 2 ? 2 : -2) * (1 - t));
+    const sx = b.facing > 0 ? x0 + i * sw : x0 + f.w - (i + 1) * sw;
+    rect(ctx, Math.round(sx), Math.round(cy - h / 2), Math.ceil(sw) + 1, Math.round(h), '#ff8000');
+    rect(ctx, Math.round(sx), Math.round(cy - h / 4), Math.ceil(sw) + 1, Math.max(2, Math.round(h / 2)), '#ffd23f');
+  }
+}
+function drawHammer(h) {
+  const sx = Math.round(h.x - camX + h.w / 2), sy = Math.round(h.y + h.h / 2);
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(h.rot);
+  rect(ctx, -3, 0, 6, 13, '#8a5a20'); rect(ctx, -1, 1, 2, 11, '#c08a40');    // 木柄
+  rect(ctx, -8, -10, 16, 10, '#b8c0c8'); rect(ctx, -8, -10, 16, 3, '#e8f0f8');  // 锤头
+  rect(ctx, -8, -10, 16, 1, '#000000'); rect(ctx, -8, 0, 16, 1, '#000000');
+  ctx.restore();
+}
+/** Boss 房世界层绘制：掉落金币 + 库巴（画在角色之前） */
+function drawBossRoom() {
+  const B = bossRoom;
+  if (!B.active) return;
+  for (const d of B.drops) {
+    const sx = Math.round(d.x - camX), sy = Math.round(d.y);
+    if (sx < -32 || sx > VIEW_W + 32) continue;
+    ctx.drawImage(coinFrames[Math.floor(coinT * 8) % 3], sx, sy, d.w, d.h);
+  }
+  if (B.boss) drawBowser(B.boss);
+}
+/** Boss 房特效层绘制：锤子 + 火焰（画在角色之后） */
+function drawBossRoomFx() {
+  const B = bossRoom;
+  if (!B.active) return;
+  for (const h of B.hammers) drawHammer(h);
+  if (B.boss && B.boss.flame) drawBossFlame(B.boss);
+}
+/** 入口横管（左侧，管口朝右）：入房落点，也是按 ↓ 主动退出的位置 */
+function drawRoomEntryPipe() {
+  const x = Math.round(-camX), y = 13 * TILE, w = 3 * TILE, h = 2 * TILE;
+  rect(ctx, x, y + 5, w - 12, h - 10, '#0058f8'); rect(ctx, x, y + 5, w - 12, 3, '#7ca8fc');
+  rect(ctx, x + w - 12, y, 12, h, '#0058f8'); rect(ctx, x + w - 12, y, 4, h, '#7ca8fc');
+  rect(ctx, x + w - 3, y, 3, h, '#000000');
+  rect(ctx, x + w - 12, y, 12, 3, '#000000'); rect(ctx, x + w - 12, y + h - 3, 12, 3, '#000000');
+}
+/** 房内 HUD：房内金币（与全局金币分列两个口径）、能力图标、商店价格、Boss 血条、提示文字 */
+function drawBossRoomHUD() {
+  const B = bossRoom;
+  ctx.textAlign = 'left';
+  if (B.active) {
+    /* 房内余额：顶部第二行居中，左侧带金币图标，避免与左上角全局金币读成同一口径 */
+    ctx.drawImage(coinFrames[Math.floor(coinT * 8) % 3], VIEW_W / 2 - 92, 64, 18, 25);
+    shadowText('房内金币 ' + B.coins, VIEW_W / 2 - 70, 82, 16, '#ffd23f');
+    /* 能力图标：激活亮、未激活灰；无敌带剩余秒数 */
+    const bf = B.buffs;
+    const chips = [
+      { t: '2J',  on: bf.doubleJump },
+      { t: bf.invincible > 0 ? '★' + Math.ceil(bf.invincible) : '★', on: bf.invincible > 0 },
+      { t: '»»',  on: bf.speedBoost },
+      { t: 'F',   on: bf.fireball },
+    ];
+    let cx = VIEW_W / 2 - 96;
+    ctx.textAlign = 'center';                           // 能力图标与商店价格同用居中排版
+    /* 入口横管常驻提示：主动退出规则要看得见，而不是藏在源码里 */
+    if (B.state === 'shop') shadowText('站管口按住 S 键退出（余额折半）', 112 - camX, 12 * TILE, 11, '#9fb4d0');
+    for (const c of chips) {
+      rect(ctx, cx, 90, 44, 16, c.on ? 'rgba(255,210,63,.22)' : 'rgba(10,10,26,.5)');
+      shadowText(c.t, cx + 22, 103, 13, c.on ? '#ffd23f' : '#54607a');
+      cx += 50;
+    }
+    /* 商店砖上方 2 格：品名 + 价格（买不起=红，已购=灰，可续购=倒计时） */
+    for (const it of BR_SHOP) {
+      const sx = it.col * TILE + TILE / 2 - camX;
+      if (sx < -40 || sx > VIEW_W + 40) continue;
+      const s = B.shop[it.col], used = map[BR_SHOP_ROW] && map[BR_SHOP_ROW][it.col] === T_QUSED;
+      const poor = !used && B.coins < it.price;
+      const blink = s && s.flashT > 0 && Math.floor(s.flashT * 10) % 2 === 0;
+      const nameCol = used ? '#7e93ba' : (poor || blink ? '#ff5a5a' : '#ffffff');
+      shadowText(it.name, sx, (BR_SHOP_ROW - 2) * TILE + 22, 12, nameCol);
+      if (used) {
+        if (it.repeat && s && s.respawnT > 0) shadowText('恢复 ' + Math.ceil(s.respawnT) + 's', sx, (BR_SHOP_ROW - 1) * TILE + 20, 12, '#9fb4d0');
+        else shadowText('已购', sx, (BR_SHOP_ROW - 1) * TILE + 20, 12, '#7e93ba');
+      } else {
+        const ds = String(it.price).length;
+        drawPixNum(it.price, 0, sx - (ds - 1) * 4 - 3, (BR_SHOP_ROW - 1) * TILE + 8, 2, poor || blink ? '#ff5a5a' : '#ffe066');
+      }
+    }
+    /* Boss 血条：越过竞技场分界列才显示（与“激活”同一判据，避免提前剧透） */
+    const pcol = Math.floor((player.x + player.w / 2) / TILE);
+    if (B.boss && B.state === 'boss' && pcol >= BR_ARENA_COL) {
+      const b = B.boss, x0 = VIEW_W - 150, y0 = 76, cell = 24;
+      shadowText('BOSS', x0 - 44, y0 + 12, 14, '#ff9de2');
+      for (let i = 0; i < b.maxHp; i++) {
+        const alive = i < b.hp;
+        const flash = alive && b.hurtT > 0 && Math.floor(b.hurtT * 24) % 2 === 0;
+        rect(ctx, x0 + i * cell, y0, cell - 4, 12, alive ? (flash ? '#ffffff' : '#e63946') : '#3a3a52');
+        if (alive) rect(ctx, x0 + i * cell, y0, cell - 4, 3, flash ? '#ffe0e0' : '#ff8a92');
+      }
+    }
+    ctx.textAlign = 'left';
+  }
+  /* 提示文字：出房后仍短暂可见（承载“50% 返还”等结算口径） */
+  if (B.msgT > 0 && B.msg) {
+    ctx.textAlign = 'center';
+    shadowText(B.msg, VIEW_W / 2, 150, 22, '#ffd23f');
+    ctx.textAlign = 'left';
+  }
+}
+
+/** 标题 → 开局：一次性入口，防连点重复触发 */
+function startGame() {
+  if (gameState !== 'title') return;
+  if (levelLocked(titleSel)) { sfx('bump'); return; }   // 未解锁关不允许启动
+  resetGame();
+}
+
+let lastPauseT = 0;                                   // 暂停防连点节流（触屏双击误触）
+function togglePause() {
+  const now = performance.now();
+  if (now - lastPauseT < 200) return;
+  lastPauseT = now;
+  if (gameState === 'play') gameState = 'pause';
+  else if (gameState === 'pause') gameState = 'play';
+}
+
+function update(dt) {
+  coinT += dt;
+  if (bossRoom.msgT > 0) bossRoom.msgT = Math.max(0, bossRoom.msgT - dt);   // 房内提示：出房后仍要自行倒计时消失
+  /* ---- 倒计时归零的统一死亡判定（上提到顶层）----
+   * 覆盖 play / 入管 / 出管 三种"时间照常走"的状态，杜绝"滑管途中跨过 0 点却等到回 play 才结算"的漏判。
+   * 直接进 dying，不依赖 die() 的 play 守卫（入管态下 die() 会拒绝）。 */
+  if (gameTime >= TIME_LIMIT && (gameState === 'play' || gameState === 'pipeIn' || gameState === 'pipeOut')) {
+    gameState = 'dying'; deathT = 0; player.vy = -760; player.vx = 0; sfx('death');
+    return;
+  }
+  if (gameState === 'play') {
+    gameTime += dt;
+    if (morphT > 0) {                                 // 变身定格：全场暂停，仅角色新旧形态闪烁
+      morphT -= dt;
+    } else {
+      updatePlayer(dt);
+      updateLifts(dt);
+      liftRide(dt);
+      collectCoins();
+      spawnEnemiesIfNeeded();
+      for (const e of enemies) updateEnemy(e, dt);
+      enemyBounce();
+      shellHitsEnemies();
+      playerEnemyHits();
+      for (const it of items) updateItem(it, dt);
+      itemCollect();
+      if (world === 'over') { updatePlants(dt); plantHits(); }
+      updateFireballs(dt);
+      if (bossRoom.active) updateBossRoom(dt);         // 资源管理 Boss 房：房内状态机 / Boss 战 / 掉落金币
+      tryEnterPipe();
+      checkExitPipeTrigger();
+      checkFlag();
+    }
+  } else if (gameState === 'pipeIn') {
+    updatePipeIn(dt);
+  } else if (gameState === 'pipeOut') {
+    updatePipeOut(dt);
+  } else if (gameState === 'dying') {
+    updateDying(dt);
+  } else if (gameState === 'pole') {
+    updatePole(dt);
+  } else if (gameState === 'tohouse') {
+    updateToHouse(dt);
+  } else if (gameState === 'flagup') {
+    updateFlagUp(dt);
+  } else if (gameState === 'tally') {
+    updateTally(dt);
+  }
+  /* 敌人出屏/死亡回收 */
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.gone || e.squashT > 0.6 || (e.dead && e.y > MAP_H * TILE + 120) ||
+        e.x + e.w < camX - 140) enemies.splice(i, 1);
+  }
+  /* 特效推进 */
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const e = effects[i];
+    e.t += dt; e.y += e.vy * dt;
+    if (e.vx) e.x += e.vx * dt;
+    if (e.type === 'coin' || e.type === 'frag' || e.type === 'cap') e.vy += 1500 * dt;
+    else if (e.type === 'firework') e.vy += FIREWORK_GRAV * dt;
+    if (e.t > e.life) FX_POOL.push(effects.splice(i, 1)[0]);
+  }
+  for (const [k, b] of bumps) { b.t += dt; if (b.t > BUMP_T) bumps.delete(k); }
+  updateCamera(dt);
+}
+
+/* ================== 7. 音效（WebAudio 振荡器 8-bit 占位，无音频文件） ================== */
+let audioOn = true, actx = null, masterGain = null;
+try { audioOn = localStorage.getItem('pmario_mute') !== '1'; } catch (e) {}
+function ensureAudio() {
+  if (!actx) {
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = actx.createGain();                 // 主音量总线（M 总开关）
+      masterGain.gain.value = audioOn ? 1 : 0;
+      masterGain.connect(actx.destination);
+      makeNoise();                                    // 白噪缓冲随上下文一次性生成（鼓组共用）
+    } catch (e) { actx = null; }
+  }
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+/** 单音：f0→f1 滑音，dur 秒，指数衰减 */
+function tone(f0, f1, dur, type, vol, when) {
+  if (!masterGain) return;
+  const t0 = actx.currentTime + (when || 0);
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t0);
+  if (f1 !== f0) o.frequency.linearRampToValueAtTime(f1, t0 + dur);
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+/* ---- 噪声打击乐通道：8-bit 味道的 hi-hat / snare（白噪 + 滤波 + 极短包络） ---- */
+let NOISE_BUF = null;
+function makeNoise() {
+  if (!actx || NOISE_BUF) return;
+  const n = Math.max(1, Math.floor(actx.sampleRate * 0.3));
+  NOISE_BUF = actx.createBuffer(1, n, actx.sampleRate);
+  const d = NOISE_BUF.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+}
+/** dur 秒 / cutoff Hz / type 滤波类型 / vol 峰值：任一非法即静音返回（AudioParam 遇 NaN 会整条链路抛错） */
+function noiseHit(dur, cutoff, vol, when, type) {
+  if (!masterGain || !NOISE_BUF) return;
+  const d = +dur, f = +cutoff, v = +vol;
+  if (!(isFinite(d) && isFinite(f) && isFinite(v)) || d <= 0 || v <= 0) return;
+  const t0 = actx.currentTime + (when || 0);
+  const s = actx.createBufferSource(), bq = actx.createBiquadFilter(), g = actx.createGain();
+  s.buffer = NOISE_BUF; s.loop = true;
+  bq.type = type || 'highpass'; bq.frequency.value = Math.min(20000, Math.max(40, f));
+  g.gain.setValueAtTime(v, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + d);
+  s.connect(bq); bq.connect(g); g.connect(masterGain);
+  s.start(t0); s.stop(t0 + d + 0.02);
+}
+/** 底鼓：正弦快速下扫（无噪声也有的低频冲击） */
+function kickHit(vol, when) { tone(150, 45, 0.09, 'sine', vol, when); }
+const SFX_DEF = {
+  jump:   () => tone(260, 640, 0.16, 'square', 0.13, 0),
+  coin:   () => { tone(988, 988, 0.07, 'square', 0.14, 0); tone(1319, 1319, 0.24, 'square', 0.14, 0.07); },
+  bump:   () => tone(150, 80, 0.09, 'square', 0.18, 0),
+  brick:  () => { tone(320, 90, 0.06, 'square', 0.18, 0); tone(210, 60, 0.05, 'square', 0.13, 0.03); },
+  stomp:  () => tone(420, 80, 0.13, 'triangle', 0.20, 0),
+  kick:   () => tone(500, 150, 0.10, 'square', 0.15, 0),
+  grow:   () => [262, 330, 392, 523, 660, 784].forEach((f, i) => tone(f, f, 0.08, 'square', 0.13, i * 0.05)),
+  shrink: () => [1047, 784, 659, 523, 392].forEach((f, i) => tone(f, f, 0.07, 'square', 0.13, i * 0.05)),
+  death:  () => [494, 466, 440, 415, 392, 330, 262, 196].forEach((f, i) => tone(f, f, 0.12, 'square', 0.15, i * 0.11)),
+  fire:   () => tone(880, 220, 0.12, 'sawtooth', 0.12, 0),
+  sprout: () => tone(220, 660, 0.10, 'square', 0.12, 0),
+  star:   () => [1319, 1568, 1976, 2637].forEach((f, i) => tone(f, f, 0.07, 'square', 0.13, i * 0.045)),
+  flag:   () => [392, 523, 659, 784, 880, 1047].forEach((f, i) => tone(f, f, 0.09, 'triangle', 0.12, i * 0.07)),
+  win:    () => [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, f, 0.16, 'square', 0.13, i * 0.08)),
+  oneup:  () => [660, 880, 1100, 1320, 1560, 1760].forEach((f, i) => tone(f, f, 0.07, 'square', 0.12, i * 0.055)),
+  pop:    () => { tone(1200, 160, 0.14, 'square', 0.12, 0); tone(500, 80, 0.12, 'triangle', 0.10, 0.02); },
+  skid:   () => tone(210, 90, 0.22, 'sawtooth', 0.10, 0),
+  pipe:   () => tone(300, 90, 0.5, 'square', 0.14, 0),
+  hurry:  () => [880, 880, 880, 880].forEach((f, i) => tone(f, f, 0.08, 'square', 0.16, i * 0.13)),
+  tap:    () => tone(1500, 900, 0.03, 'square', 0.05, 0),   // 触屏落键极轻点击声（无震动设备的手感补偿）
+};
+function sfx(name) {
+  if (!audioOn) return;
+  ensureAudio();
+  if (actx && SFX_DEF[name]) SFX_DEF[name]();
+}
+/** 跳跃音：基频随水平速度上移（原版跑跳音色区分） */
+function jumpSfx(vx) {
+  if (!audioOn) return;
+  ensureAudio();
+  if (!actx) return;
+  const k = Math.min(1, vx / MAX_SPEED);
+  tone(260 + k * 120, 640 + k * 260, 0.16, 'square', 0.13, 0);
+}
+/** 短乐句 stinger：一次性 1 秒级动机，只给“事件”用（Boss 击破/挑战失败），不进入循环 */
+function stinger(name) {
+  if (!audioOn) return;
+  ensureAudio();
+  if (!actx) return;
+  if (name === 'bossWin') {                            // 大调上行琶音 + 长顶音：击破的落点感
+    [60, 64, 67, 72, 76, 79].forEach((n, i) => tone(midi2f(n), midi2f(n), 0.11, 'square', 0.11, i * 0.085));
+    tone(midi2f(84), midi2f(84), 0.55, 'square', 0.10, 6 * 0.085);
+    tone(midi2f(48), midi2f(48), 0.6, 'triangle', 0.09, 6 * 0.085);
+  } else if (name === 'bossLose') {                    // 半音下行 + 低音长音：失败的塌落感
+    [64, 63, 62, 61].forEach((n, i) => tone(midi2f(n), midi2f(n), 0.16, 'triangle', 0.11, i * 0.14));
+    tone(midi2f(49), midi2f(45), 0.55, 'triangle', 0.10, 4 * 0.14);
+  }
+}
+
+/* ---- 8-bit 背景音乐：原创循环小曲（音量压低垫在音效下），随 play 状态自动起停 ---- */
+const BGM_BPM = 140, BGM_EIGHTH = 60 / BGM_BPM / 2;   // 八分音符时值（秒）
+const midi2f = n => 440 * Math.pow(2, (n - 69) / 12);
+const BGM_MELO = [   // MIDI 音高，0 = 休止；四段主题各 16 个八分音符循环
+  72,76,79,76, 81,79,76,72, 74,77,81,77, 79,76,72,0,
+  72,76,79,76, 81,84,81,79, 77,81,79,77, 74,72,69,0,
+  71,74,77,74, 79,77,74,71, 72,76,79,76, 81,79,76,74,
+  72,74,76,77, 79,81,83,84, 88,84,83,81, 79,76,74,71,
+];
+const BGM_BASS = [36,0,43,0, 41,0,45,0, 36,0,43,0, 38,0,43,0];   // 每两个八分音符一个低音
+/* 地下奖励房 BGM：低音区原创短循环 */
+const BGM_MELO_U = [45,0,48,0, 52,0,48,0, 50,0,48,0, 45,0,43,0,
+                    41,0,45,0, 48,0,52,0, 55,0,53,0, 50,0,48,0];
+const BGM_BASS_U = [33,0,40,0, 33,0,38,0];
+/* Boss 战 BGM：A 小调，A 段快速追逐 + B 段半音狂暴；方波主旋律 + 三角波低音，音量稍大 */
+const BGM_MELO_BOSS = [
+  // A 段：追逐（4 小节，32 个八分音符）——A 小调重复跳进，压迫感
+  69,0,69,72, 74,0,72,69, 67,0,67,70, 72,0,70,67,
+  65,0,65,68, 69,0,68,65, 64,0,67,69, 72,0,71,69,
+  // B 段：狂暴（4 小节，32 个八分音符）——半音阶上爬+下爬，不和谐紧张
+  69,70,71,72, 73,74,75,76, 77,76,75,74, 73,72,71,69,
+  68,69,70,71, 72,73,74,75, 76,75,74,73, 72,71,69,67,
+];
+const BGM_BASS_BOSS = [
+  // A 段低音（16 个，每两个八分音符一个）——A2-G2-F2-F#2 下行进行
+  45,0,45,0, 43,0,43,0, 41,0,41,0, 40,0,40,0,
+  45,0,45,0, 43,0,43,0, 41,0,43,0, 45,0,45,0,
+  // B 段低音（16 个）——半音上行，与旋律狂暴段呼应
+  45,0,46,0, 47,0,48,0, 49,0,48,0, 47,0,46,0,
+  45,0,46,0, 47,0,48,0, 49,0,50,0, 52,0,50,0,
+];
+/* 1-3 高空关主题曲：E5~D6 高音区、四五度宽跳、大量休止，rate 1.18（≈119BPM）把节奏拖慢换浮空感 */
+const BGM_MELO_SKY = [
+  76,0,0,83, 81,0,79,0, 76,0,0,83, 86,0,84,0,
+  81,0,0,76, 79,0,81,0, 84,0,83,0, 81,79,76,0,
+];
+const BGM_BASS_SKY = [40,0,0,0, 45,0,0,0, 43,0,0,0, 38,0,0,0];   // 每两拍一个根音，空旷
+/* 鼓组 pattern：16 个八分步（bgmIdx % 16），k=底鼓 s=军鼓 h=踩镲 */
+const DRUM_KITS = {
+  rock:   { k: '1000000010000000', s: '0000100000001000', h: '1010101010101010' },   // 地上：经典推进
+  sparse: { k: '1000000000000000', s: '0000000000000000', h: '0000100000001000' },   // 地下：只留空拍与闭镲
+  airy:   { k: '1000000000000000', s: '0000000000000000', h: '0010000000100000' },   // 高空：稀疏点缀
+  drive:  { k: '1000100010001000', s: '0000100000001000', h: '1111111111111111' },   // Boss：四分底鼓 + 八分密镲
+};
+/* 主题登记表：由 LEVELS[].music 与房间状态共同选曲（rate=时值放大倍数，越小越快） */
+const BGM_TRACKS = {
+  over:  { mel: BGM_MELO,      bas: BGM_BASS,      kit: 'rock',   rate: 1,    drum: 1 },
+  under: { mel: BGM_MELO_U,    bas: BGM_BASS_U,    kit: 'sparse', rate: 1.06, drum: 0.7 },
+  sky:   { mel: BGM_MELO_SKY,  bas: BGM_BASS_SKY,  kit: 'airy',   rate: 1.18, drum: 0.75 },
+  boss:  { mel: BGM_MELO_BOSS, bas: BGM_BASS_BOSS, kit: 'drive',  rate: 1,    drum: 1.15 },
+};
+let bgmIdx = 0, bgmNext = 0, bgmTrack = '';
+function bgmTick() {
+  const playing = gameState === 'play' || gameState === 'pipeIn' || gameState === 'pipeOut';
+  if (!actx || !masterGain || !audioOn || !playing) return;
+  if (bgmNext < actx.currentTime) bgmNext = actx.currentTime + 0.06;   // 暂停恢复/掉帧后重新对拍
+  /* Boss 战 BGM 优先级最高：激活战斗且未退回商店区且 Boss 存活时播放 */
+  const bossFight = bossRoom.active && bossRoom.state === 'boss' && !bossRoom.atHome
+                  && bossRoom.boss && bossRoom.boss.hp > 0 && bossRoom.boss.state !== 'dead';
+  const under = world === 'under';
+  /* 选曲：Boss 战 > 奖励房内 > 关卡自带 theme（1-2 地下 / 1-3 高空），缺省地上主题曲 */
+  const trName = bossFight ? 'boss' : (under ? 'under'
+                 : (cur.music || (cur.theme === 'under' ? 'under' : 'over')));
+  const tr = BGM_TRACKS[trName] || BGM_TRACKS.over;
+  if (trName !== bgmTrack) { bgmTrack = trName; bgmIdx = 0; }           // 换曲从头起小节，避免半句切入
+  const mel = tr.mel, bas = tr.bas, kit = DRUM_KITS[tr.kit], drumVol = tr.drum;
+  /* 速度：无敌星/Hurry-up 沿用原版；Boss 战整体稍快（0.92≈152BPM），阶段3狂暴再加速（0.85≈165BPM） */
+  const bossRage = bossFight && bossRoom.boss && bossRoom.boss.phase >= 3;
+  const spd = player.starT > 0 ? 0.55 : hurry ? 0.72 : (bossRage ? 0.85 : (bossFight ? 0.92 : 1));
+  const eighth = BGM_EIGHTH * tr.rate * spd;
+  /* Boss 战音量稍大，增加压迫感 */
+  const melVol = bossFight ? 0.05 : (under ? 0.038 : 0.042);
+  const basVol = bossFight ? 0.065 : 0.055;
+  while (bgmNext < actx.currentTime + 0.4) {                            // 前瞻 0.4s 排音
+    const when = bgmNext - actx.currentTime;
+    const m = mel[bgmIdx % mel.length];
+    if (m) tone(midi2f(m), midi2f(m), eighth * 0.85, 'square', melVol, when);
+    if (bgmIdx % 2 === 0) {
+      const b = bas[(bgmIdx >> 1) % bas.length];
+      if (b) tone(midi2f(b), midi2f(b), eighth * 1.7, 'triangle', basVol, when);
+    }
+    if (kit) {                                        // 鼓组：16 个八分步一轮
+      const st = bgmIdx % 16;
+      if (kit.k[st] === '1') kickHit(0.07 * drumVol, when);
+      if (kit.s[st] === '1') { noiseHit(0.09, 1900, 0.05 * drumVol, when, 'bandpass'); tone(190, 150, 0.05, 'triangle', 0.035 * drumVol, when); }
+      if (kit.h[st] === '1') noiseHit(0.028, 7600, 0.026 * drumVol, when, 'highpass');
+    }
+    bgmIdx++; bgmNext += eighth;
+  }
+}
+
+/* ============================ 8. 摄像机 ============================ */
+let camX = 0;                                        // 地图高恰等于视口高，只需横向跟随
+/** 平滑跟随 + 地图边界钳制（无视差） */
+function updateCamera(dt) {
+  const target = Math.max(0, Math.min(player.x + player.w / 2 - VIEW_W * 0.42,
+                                       MAP_W * TILE - VIEW_W));
+  camX += (target - camX) * Math.min(1, dt * 10);
+  if (Math.abs(target - camX) < 0.5) camX = target;
+}
+/** 当前可视列区间（性能验收用：渲染只遍历该区间） */
+function visibleRange() {
+  return [ Math.max(0, Math.floor(camX / TILE)),
+           Math.min(MAP_W - 1, Math.ceil((camX + VIEW_W) / TILE)) ];
+}
+
+/* ============================ 9. 像素渲染 ============================ */
+const cvs = document.getElementById('game');
+cvs.addEventListener('pointerdown', e => {          // 标题界面：点击卡片选关/开始
+  if (gameState !== 'title') return;
+  const r = cvs.getBoundingClientRect();
+  const x = (e.clientX - r.left) * VIEW_W / r.width, y = (e.clientY - r.top) * VIEW_H / r.height;
+  const M = TITLE_MENU;
+  const i = Math.floor((y - (M.y0 - 8)) / M.gap);
+  if (i < 0 || i >= LEVELS.length || x < M.x0 - 12 || x > M.x0 + M.w + 12 || (y - (M.y0 - 8)) > M.h * LEVELS.length + (LEVELS.length - 1) * (M.gap - M.h) + 16) return;
+  ensureAudio();
+  if (levelLocked(i)) { sfx('bump'); return; }       // 未解锁：闷响拒绝
+  if (i === titleSel) startGame(); else { titleSel = i; sfx('coin'); }
+});
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;                   // 像素风：禁用平滑
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function rect(g, x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
+
+/* ---- 瓦片精灵：全部预渲染到离屏画布，运行时只做 drawImage ---- */
+function makeTile(draw) { const c = makeCanvas(TILE, TILE); draw(c.getContext('2d')); return c; }
+/* 关卡主题调色：地上=原版橙棕/绿管；地下=原版全蓝（NES 地下关：砖/管/? 同用蓝调色板，黑缝白高光） */
+const THEME_OVER  = { gBody:'#d2761e', gHi:'#ffbb77', gSeam:'#6e2a00',
+                      bBody:'#b5482a', bHi:'#e08060', bSeam:'#3d1408',
+                      qBody:'#e8961e', qEdge:'#8a4a00', qGlyph:'#fff6dc',
+                      uBody:'#9a6a30', uEdge:'#5a3a10',
+                      pBody:'#22ac38', pHi:'#7ae048', pDark:'#0e6a24', pEdge:'#0a4a14' };
+const THEME_UNDER = { gBody:'#0058f8', gHi:'#7ca8fc', gSeam:'#000000',
+                      bBody:'#0058f8', bHi:'#7ca8fc', bSeam:'#000000',
+                      qBody:'#0058f8', qEdge:'#000000', qGlyph:'#fcf8fc',
+                      uBody:'#0000bc', uEdge:'#000000',
+                      pBody:'#0058f8', pHi:'#7ca8fc', pDark:'#0000bc', pEdge:'#000000' };
+function buildTiles(T) {
+  return {
+    [T_GROUND]: makeTile(g => {                        // 地面砖：双行错缝
+      rect(g, 0, 0, 32, 32, T.gBody);
+      rect(g, 0, 0, 32, 2, T.gHi); rect(g, 0, 16, 32, 1, T.gHi);
+      rect(g, 0, 14, 32, 2, T.gSeam); rect(g, 0, 30, 32, 2, T.gSeam);
+      rect(g, 15, 2, 2, 12, T.gSeam); rect(g, 0, 16, 2, 14, T.gSeam); rect(g, 31, 16, 1, 14, T.gSeam);
+    }),
+    [T_BRICK]: makeTile(g => {                         // 砖块
+      rect(g, 0, 0, 32, 32, T.bBody);
+      rect(g, 0, 0, 32, 2, T.bHi);
+      rect(g, 0, 14, 32, 2, T.bSeam); rect(g, 0, 30, 32, 2, T.bSeam);
+      rect(g, 15, 2, 2, 12, T.bSeam); rect(g, 0, 16, 2, 14, T.bSeam); rect(g, 31, 16, 1, 14, T.bSeam);
+    }),
+    [T_QBLOCK]: makeTile(g => {                        // 问号砖
+      rect(g, 0, 0, 32, 32, T.qBody);
+      rect(g, 0, 0, 32, 2, T.qEdge); rect(g, 0, 30, 32, 2, T.qEdge);
+      rect(g, 0, 0, 2, 32, T.qEdge); rect(g, 30, 0, 2, 32, T.qEdge);
+      rect(g, 3, 3, 3, 3, T.qEdge);  rect(g, 26, 3, 3, 3, T.qEdge);
+      rect(g, 3, 26, 3, 3, T.qEdge); rect(g, 26, 26, 3, 3, T.qEdge);
+      const Q = ['01110', '10001', '00001', '00110', '00100', '00000', '00100'];
+      Q.forEach((r, y) => { for (let x = 0; x < 5; x++)
+        if (r[x] === '1') rect(g, 10 + x * 2, 8 + y * 2, 2, 2, T.qGlyph); });
+    }),
+    [T_QUSED]: makeTile(g => {                         // 已用问号砖
+      rect(g, 0, 0, 32, 32, T.uBody);
+      rect(g, 0, 0, 32, 2, T.uEdge); rect(g, 0, 30, 32, 2, T.uEdge);
+      rect(g, 0, 0, 2, 32, T.uEdge); rect(g, 30, 0, 2, 32, T.uEdge);
+      rect(g, 3, 3, 3, 3, T.uEdge);  rect(g, 26, 3, 3, 3, T.uEdge);
+      rect(g, 3, 26, 3, 3, T.uEdge); rect(g, 26, 26, 3, 3, T.uEdge);
+    }),
+    /* 商店砖（仅 Boss 房出现）：问号砖结构 + 固定紫底金字，地下全蓝主题下也要一眼可辨 */
+    [T_SHOP]: makeTile(g => {
+      rect(g, 0, 0, 32, 32, '#7c2ea8');
+      rect(g, 0, 0, 32, 2, '#3d0a52'); rect(g, 0, 30, 32, 2, '#3d0a52');
+      rect(g, 0, 0, 2, 32, '#3d0a52'); rect(g, 30, 0, 2, 32, '#3d0a52');
+      rect(g, 3, 3, 3, 3, '#3d0a52');  rect(g, 26, 3, 3, 3, '#3d0a52');
+      rect(g, 3, 26, 3, 3, '#3d0a52'); rect(g, 26, 26, 3, 3, '#3d0a52');
+      rect(g, 2, 2, 28, 2, '#a55ad8');                 // 内圈高光：区分于普通问号砖
+      const Q = ['01110', '10001', '00001', '00110', '00100', '00000', '00100'];
+      Q.forEach((r, y) => { for (let x = 0; x < 5; x++)
+        if (r[x] === '1') rect(g, 10 + x * 2, 8 + y * 2, 2, 2, '#ffd23f'); });
+    }),
+  };
+}
+/* 管道：顶盖/管身 × 左右两半（外缘描边，接缝不断开）；吊管口用顶盖精灵上下翻转 */
+function buildPipes(T) {
+  const mk = (top, left) => makeTile(g => {
+    rect(g, 0, 0, 32, 32, T.pBody);
+    rect(g, 6, 0, 7, 32, T.pHi);
+    rect(g, 25, 0, 5, 32, T.pDark);
+    if (top) { rect(g, 0, 0, 32, 2, T.pEdge); rect(g, 0, 13, 32, 2, T.pEdge); }
+    if (left) rect(g, 0, 0, 2, 32, T.pEdge);
+    else      rect(g, 30, 0, 2, 32, T.pEdge);
+  });
+  return { TL: mk(true, true), TR: mk(true, false), BL: mk(false, true), BR: mk(false, false) };
+}
+const tileSprites = buildTiles(THEME_OVER), tileSpritesU = buildTiles(THEME_UNDER);
+const PIPES_OVER = buildPipes(THEME_OVER),  PIPES_UNDER = buildPipes(THEME_UNDER);
+
+/* ---- 角色：原版 NES 精灵字符画（sprites_raw 提取，2px 缩放） ----
+ * 原版三色：R=#d82800 红(帽/背带裤) H=#887000 棕(发/衫/鞋) S=#fc9838 肤；
+ * 火力形态=原版换色（原棕槽→红、原红槽→奶白），无敌星=红绿槽循环闪 */
+const PAL = { R: '#d82800', H: '#887000', S: '#fc9838' };
+const PAL_FIRE = { R: '#fcd8a8', H: '#d82800', S: '#fc9838' };
+const PAL_SG = { R: '#00a800', H: '#d82800', S: '#fc9838' };
+const PAL_SR = { R: '#d82800', H: '#00a800', S: '#fc9838' };
+const SMALL_STAND = [
+  '...RRRRR....',
+  '..RRRRRRRRR.',
+  '..HHHSSHS...',
+  '.HSHSSSHSSS.',
+  '.HSHHSSSHSSS',
+  '.HHSSSSHHHH.',
+  '...SSSSSSS..',
+  '..HHRHHH....',
+  '.HHHRHHRHHH.',
+  'HHHHRRRRHHHH',
+  'SSHRSRRSRHSS',
+  'SSSRRRRRRSSS',
+  'SSRRRRRRRRSS',
+  '..RRR..RRR..',
+  '.HHH....HHH.',
+  'HHHH....HHHH',
+];
+const SMALL_WALK1 = [
+  '...............',
+  '......RRRRR....',
+  '.....RRRRRRRRR.',
+  '.....HHHSSHS...',
+  '....HSHSSSHSSS.',
+  '....HSHHSSSHSSS',
+  '....HHSSSSHHHH.',
+  '......SSSSSSS..',
+  '.....HHHHRH.S..',
+  '....SHHHHHHSSS.',
+  '...SSRHHHHHSS..',
+  '...HHRRRRRRR...',
+  '...HRRRRRRRR...',
+  '..HHRRR.RRR....',
+  '..H....HHH.....',
+  '.......HHHH....',
+];
+const SMALL_WALK2 = [
+  '.....RRRRR.....',
+  '....RRRRRRRRR..',
+  '....HHHSSHS....',
+  '...HSHSSSHSSS..',
+  '...HSHHSSSHSSS.',
+  '...HHSSSSHHHH..',
+  '.....SSSSSSS...',
+  '..HHHHRRHH.....',
+  'SSHHHHRRRHHHSSS',
+  'SSS.HHRSRRRHHSS',
+  'SS..RRRRRRR..H.',
+  '...RRRRRRRRRHH.',
+  '..RRRRRRRRRRHH.',
+  '.HHRRR...RRRHH.',
+  '.HHH...........',
+  '..HHH..........',
+];
+const SMALL_WALK3 = [
+  '.....RRRRR.....',
+  '....RRRRRRRRR..',
+  '....HHHSSHS....',
+  '...HSHSSSHSSS..',
+  '...HSHHSSSHSSS.',
+  '...HHSSSSHHHH..',
+  '.....SSSSSSS...',
+  '....HHRHHH.....',
+  '...HHHHRRHH....',
+  '...HHHRRSRRS...',
+  '...HHHHRRRRR...',
+  '...RHHSSSRRR...',
+  '....RHSSRRR....',
+  '.....RRRHHH....',
+  '.....HHHHHHH...',
+  '.....HHHH......',
+];
+const SMALL_JUMP = [
+  '.............SSS',
+  '......RRRRR..SSS',
+  '.....RRRRRRRRRSS',
+  '.....HHHSSHS.HHH',
+  '....HSHSSSHSSHHH',
+  '....HSHHSSSHSSSH',
+  '....HHSSSSHHHHH.',
+  '......SSSSSSSH..',
+  '..HHHHHRHHHRH...',
+  '.HHHHHHHRHHHR..H',
+  'SSHHHHHHRRRRR..H',
+  'SSS.RRHRRSRRSRHH',
+  '.S.HRRRRRRRRRRHH',
+  '..HHHRRRRRRRRRHH',
+  '.HHHRRRRRRR.....',
+  '.H..RRRR........',
+];
+const SMALL_SKID = [
+  '....RRRRR....',
+  '..HRRRRRRRR..',
+  '.HHHHHHSHS...',
+  'SSHSSHSSSSSS.',
+  'SSHSSHHSSHHSS',
+  '.SSHSSSSSSHH.',
+  '..RRRHHHRSS..',
+  '.RRSSSHRRHHH.',
+  '.RHSSSHHHHHH.',
+  '.RRRSSHHHHHH.',
+  '..RRRRRHHHH..',
+  '..RHHHRRRR...',
+  '...HHHHRRR...',
+  'H.HRRHHHR....',
+  'HHHHHR.......',
+  '.HHHH........',
+];
+const BIG_STAND = [
+  '......RRRRR.....',
+  '....RRRRRRS.....',
+  '...RRRRRRSS.....',
+  '...RRRRRRRRRRR..',
+  '...HHHSSHSSS....',
+  '..HSSHSSHHSSSS..',
+  '..HSSHHSSSSSSSS.',
+  '.HHSSHHSSSHSSSS.',
+  '.HHSSSSSHHHHHH..',
+  '.HHHSSSSSHHHHH..',
+  '...HHSSSSSSSS...',
+  '....RSSSSSH.....',
+  '....HRHHHHRH....',
+  '...HHRHHHHRHH...',
+  '..HHHRHHHHRHHH..',
+  '.HHHHRHHHHRHHHH.',
+  '.HHHRRHHHHRRHHH.',
+  'HHHHRRHHHHRRHHHH',
+  'HHHHRRRRRRRRHHHH',
+  'HHHHRSRRRRSRHHHH',
+  'SSSSRRRRRRRRSSSS',
+  'SSSSRRRRRRRRSSSS',
+  '.SSSRRRRRRRRSSS.',
+  '.SSRRRRRRRRRRSS.',
+  '..RRRRRRRRRRRR..',
+  '.RRRRRR..RRRRRR.',
+  '.RRRRR....RRRRR.',
+  '.RRRRR....RRRRR.',
+  '..HHHH....HHHH..',
+  '..HHHH....HHHH..',
+  'HHHHHH....HHHHHH',
+  'HHHHHH....HHHHHH',
+];
+const BIG_WALK1 = [
+  '......RRRRR.....',
+  '....RRRRRRS.....',
+  '...RRRRRRSS.....',
+  '...RRRRRRRRRRR..',
+  '...HHHSSHSSS....',
+  '..HSSHSSHHSSSS..',
+  '..HSSHHSSSSSSSS.',
+  '.HHSSHHSSSHSSSS.',
+  '.HHSSSSSHHHHHH..',
+  '.HHHSSSSSHHHHH..',
+  '...HHSSSSSSSS...',
+  '.....HHHSS......',
+  '....RRRRHHR...S.',
+  '...HHHHRRHHR.SSS',
+  '..HHHHHHRRHRHSSS',
+  '.HHHHHHHRRHHRSSS',
+  '.HHHHHHHRRHHRHSH',
+  '.HHHHHHRRRHHRHH.',
+  'HHHHHHRRRSRHSH..',
+  'HHHHRRRRRRRRR...',
+  'SSSSSRRRRRRRR...',
+  'SSSSSRRRRRRRR..H',
+  'SSSSRRRRRRRRR.HH',
+  '.SSSRRRRRRRHHHHH',
+  '...RHRRRRRRHHHHH',
+  '..HRRHRRRRRHHHHH',
+  'HHHRRRHHRRRHHHHH',
+  'HHHHRRRR...HHHHH',
+  'HHHHHR..........',
+  '.HHH............',
+  '.HHH............',
+  '..HHH...........',
+];
+const BIG_WALK2 = [
+  '................',
+  '................',
+  '.......RRRRR....',
+  '.....RRRRRRS....',
+  '....RRRRRRSS....',
+  '....RRRRRRRRRRR.',
+  '....HHHSSHSSS...',
+  '...HSSHSSHHSSSS.',
+  '...HSSHHSSSSSSSS',
+  '..HHSSHHSSSHSSSS',
+  '..HHSSSSSHHHHHH.',
+  '...HHSSSSSHHHHH.',
+  '.....HSSSSSSSS..',
+  '....HRRRSSS.....',
+  '...HRHHHRH......',
+  '...HRHHHHRH.....',
+  '..HHRHHHHHRRSS..',
+  '..HRRHHHHHHHSSSS',
+  '..HRRRHHHHHHSSSS',
+  '...RRRHHHHHHHSSS',
+  '...RRRRHHHHHHSSS',
+  '...RRRRRRHHHR...',
+  '...RRRRRRRRRR...',
+  '...RRRRRRRRRH...',
+  'HHHHRRRRRRRHRR..',
+  'HHHHRRRRRHHRRR..',
+  'HHHHRRRRHRRRR...',
+  'HHHHRRR..RRRR...',
+  'HHHH.....HHHH...',
+  'HH.......HHHH...',
+  'H........HHHHHH.',
+  '.........HHHHHH.',
+];
+const BIG_WALK3 = [
+  '................',
+  '.......RRRRR....',
+  '.....RRRRRRS....',
+  '....RRRRRRSS....',
+  '....RRRRRRRRRRR.',
+  '....HHHSSHSSS...',
+  '...HSSHSSHHSSSS.',
+  '...HSSHHSSSSSSSS',
+  '..HHSSHHSSSHSSSS',
+  '..HHSSSSSHHHHHH.',
+  '...HHSSSSSHHHHH.',
+  '....HHSSSSSSSS..',
+  '.....RRRRSS.....',
+  '....HRHHRRHH....',
+  '...HRHHHHRRH....',
+  '...HRHHHHRRHH...',
+  '...HRHHHHRRRH...',
+  '...HRHHHHHSSH...',
+  '...HRHHHHSSSS...',
+  '...RRHHHHSSSSR..',
+  '...RRRHHHSSSSRR.',
+  '...RRRRHHSSSRRR.',
+  '...RRRRRRHHRRRR.',
+  '....RRRRRHHHRR..',
+  '.....RRRHHHHHH..',
+  '.....RRHHHHHH...',
+  '......RRHHHH....',
+  '......HRRRHHH...',
+  '......HHHH.HH...',
+  '.....HHHHH......',
+  '.....HHHHHHH....',
+  '.......HHHHH....',
+];
+const BIG_JUMP = [
+  '............SSS.',
+  '...........SSHSS',
+  '......RRRRRSSHHS',
+  '....RRRRRRRSSSSS',
+  '...RRRRRRRRHHHHH',
+  '...RRRRRRRRRRRHH',
+  '...HHHSSHSSSHHHH',
+  '..HSSHSSHSSSSSHH',
+  '..HSSHHSSSSSSSSH',
+  '..HSSHHSSSHSSSSH',
+  '.HHSSSSSHHHHHHH.',
+  '.HHHHSSSSHHHHSH.',
+  '...HHSSSSSSSSHH.',
+  '....RRRRHHRHHHH.',
+  '.HHHHHHRRHRHHH..',
+  'HHHHHHHHRHHRHH..',
+  'HHHHHHHHRRHRH...',
+  'HHSSHHHHRRHHR...',
+  'HSSSSHHRRRRHS...',
+  'SSSSSHRRRSRRR...',
+  'SSSSSRRRRRRRR...',
+  'S.SSRRRRRRRRR..H',
+  '.SSRRRRRRRRRR.HH',
+  '...RRRRRRRRRHHHH',
+  '...HRRRRRRRRHHHH',
+  'HHHRHHRRRRRRHHHH',
+  'HHHRRRHHRRRRHHHH',
+  'HHHRRRRR..RRHHHH',
+  'HHHRRRRR........',
+  'HHHRRRR.........',
+  'HH..............',
+  'H...............',
+];
+const BIG_SKID = [
+  '......RRRRRRR...',
+  '..HHRRRRRRRSS...',
+  '.HHHRRRRRRRS....',
+  '.SSHHSSHRRRRRR..',
+  'SSSSHSSHSSHSSRR.',
+  'SSSSHSSHSSHHS...',
+  'SSHSRSSSHSSSSSS.',
+  'SHSHRRSSSSSHSSSS',
+  'SSHRRHHSSHHHHSSS',
+  '...RHHHSSSSHHHH.',
+  '..RRHHHHHSSSSS..',
+  '..RHHSSSHHRRRHH.',
+  '..RHSSSSSRRRHHH.',
+  '..RHSSSSSHHRHHH.',
+  '....SSSSSHHHHHHH',
+  '..RRRSHSSHHHHHHH',
+  '..RRRRSSHHHHHHHH',
+  '..RRRRRRRHHHHHHH',
+  '...RRRRRRRHHHHHH',
+  '....HHHRRRRRHHH.',
+  '.....HHHHHRRRRR.',
+  '..HHHHHHHHRRRRR.',
+  '..HSSSSHHHHRRR..',
+  '..HSSSSSSHHR....',
+  '....RRRRSSH.....',
+  'H..RRRRRRR......',
+  'HH..HRRRR.......',
+  'HHHHHHHRR.......',
+  '.HHHHHHH........',
+  '..HHHHHH........',
+  '...HHHH.........',
+  '....HHH.........',
+];
+const BIG_CROUCH = [
+  '.......RRRRR....',
+  '.....RRRRRRS....',
+  '....RRRRRRSS....',
+  '....RRRRRRRRRRR.',
+  '....HHHSSHSSS...',
+  '...HSSHSSHHSSSS.',
+  '..HHSSSHSSSHSSSS',
+  '..HHSSSSSHHHHHH.',
+  '..RRHSSSSSHHHHH.',
+  '.HHHRHSSSSSSSSS.',
+  '.HHHRHHHSSSHHRH.',
+  'HHHHRHHHHHHHHRH.',
+  'HHHHRHHHHHHHRRHH',
+  'HHHHRSHHHHHRRHHH',
+  'HHHHRRRRRRRRHHHH',
+  'HHHHHRRRRRRHHHHH',
+  'HHHSSSRRRRSSSHHH',
+  'RHSSSSRRRRSSSSHR',
+  'RSSSSRRRRRRSSSSR',
+  '.RSSH......HSSR.',
+  '..HHHH....HHHH..',
+  'HHHHHH....HHHHHH',
+];
+/* 死亡帧（原版无此素材文件，按原版造型手绘：正面举手张嘴） */
+const DEAD_MAP = [
+  '..S.RRRR.S..',
+  '.SSRRRRRRSS.',
+  '..SSHSSHSS..',
+  '..SSSSSSSS..',
+  '..SSSKKSSS..',
+  '..SSSKKSSS..',
+  '...SSSSSS...',
+  '.SHHOOOOHHS.',
+  '.HHHOOOOHHH.',
+  '..OOOOOOOO..',
+  '..OOO..OOO..',
+  '..OOO..OOO..',
+  '..OOO..OOO..',
+  '..HHH..HHH..',
+  '.HHHH..HHHH.',
+  '............',
+];
+/* 爬杆帧：抓杆侧身（杆在角色左前方，drawFlag 杆位 = 瓦片内 cells 7-9，双手/手臂像素与之咬合） */
+const SMALL_CLIMB = [
+  '.....SSSSS......',
+  '....SSRRRRR.....',
+  '....RRRRRRRR....',
+  '....HHHSSHS.....',
+  '...HSHSSSHSS....',
+  '...HSHHSSSHSS...',
+  '...HHSSSSHHHH...',
+  '.....SSSSSSS....',
+  '....HHHRRHH.....',
+  '...SHHRRRRHS....',
+  '..SSHRRRRRHSS...',
+  '....HRRRRRR.....',
+  '....RRRRRRR.....',
+  '...HHRRRRHH.....',
+  '..HHHHRRRHHH....',
+  '...HHH.HHHH.....',
+];
+const BIG_CLIMB = [
+  '.....SSSSSS.....',
+  '....SSRRRRS.....',
+  '...RRRRRRS......',
+  '..RRRRRRRRR.....',
+  '..RRRRRRRRRRR...',
+  '..HHHSSHSSS.....',
+  '.HSSHSSHHSSSS...',
+  '.HSSHHSSSSSSS...',
+  'HHSSHHSSSHSSS...',
+  'HHSSSSSSHHHHH...',
+  '..HHSSSSSSSS....',
+  '...HSSSSSSSS....',
+  '...HRHHHHRH.....',
+  '..SSHRRRRRHSS...',
+  '..SSHRRRRRHSS...',
+  '..SHRRHHHRRHS...',
+  '...HRRHHHRRH....',
+  '...RRRHHHRRR....',
+  '..RRRRRRRRRR....',
+  '.RRRRRRRRRRRR...',
+  '.RRRRRRRRRRRR...',
+  'HRRRRRRRRRRRRH..',
+  'HRRSRRRRRRSRH...',
+  'SSSRRRRRRRRSS...',
+  '.SSRRRRRRRRSS...',
+  '..RRRRRRRRRR....',
+  '..RRRRRRRRRR....',
+  '..RRRR..RRRR....',
+  '..RRRR..RRRR....',
+  '..HHHH..HHHH....',
+  '.HHHHH..HHHHH...',
+  'HHHHHH..HHHHHH..',
+];
+function makeSprite(rows, pal) {
+  const c = makeCanvas(rows[0].length * 2, rows.length * 2), g = c.getContext('2d');
+  rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) {
+    const col = (pal || PAL)[r[x]]; if (col) rect(g, x * 2, y * 2, 2, 2, col);
+  }});
+  return c;
+}
+function mkSmall(p) {
+  return {
+    idle: makeSprite(SMALL_STAND, p),
+    run:  [makeSprite(SMALL_WALK1, p), makeSprite(SMALL_WALK2, p), makeSprite(SMALL_WALK3, p)],
+    jump: makeSprite(SMALL_JUMP, p),
+    skid: makeSprite(SMALL_SKID, p),
+    dead: makeSprite(DEAD_MAP, p),
+    climb: makeSprite(SMALL_CLIMB, p),
+  };
+}
+function mkBig(p) {
+  return {
+    idle: makeSprite(BIG_STAND, p),
+    run:  [makeSprite(BIG_WALK1, p), makeSprite(BIG_WALK2, p), makeSprite(BIG_WALK3, p)],
+    jump: makeSprite(BIG_JUMP, p),
+    skid: makeSprite(BIG_SKID, p),
+    crouch: makeSprite(BIG_CROUCH, p),
+    climb: makeSprite(BIG_CLIMB, p),
+  };
+}
+const SP  = mkSmall(PAL);
+const SPB = mkBig(PAL);
+const SPF = mkBig(PAL_FIRE);
+/* 无敌星：原版红绿槽三循环闪（普通/火力形态同构换色） */
+const SP_STAR  = [mkSmall(PAL), mkSmall(PAL_SG), mkSmall(PAL_SR)];
+const SPB_STAR = [mkBig(PAL),   mkBig(PAL_SG),   mkBig(PAL_SR)];
+const SPF_STAR = [mkBig(PAL_FIRE), mkBig(PAL_SG), mkBig(PAL_SR)];
+
+/* ---- 敌人 / 道具精灵：原版 NES 字符画（sprites_raw 提取） ----
+ * 栗子怪 B=#c84c0c 身 P=#fcbcb0 脸 K 黑；乌龟 G=#00a800 壳 S=#fc9838 身 W 白；
+ * 金币/问号砖/星星/火花为原版多帧调色循环 */
+const PAL_GOOMBA = { B: '#c84c0c', P: '#fcbcb0', K: '#000000' };
+const PAL_KOOPA  = { G: '#00a800', S: '#fc9838', W: '#fcfcfc' };
+const PAL_ITEM   = { S: '#fc9838', R: '#d82800', W: '#fcfcfc', G: '#00a800', B: '#c84c0c',
+                     K: '#000000', P: '#fcbcb0', F: '#fcd8a8', D: '#7c0800', H: '#887000' };
+const GOOMBA_MAP = [
+  '......BBBB......',
+  '.....BBBBBB.....',
+  '....BBBBBBBB....',
+  '...BBBBBBBBBB...',
+  '..BKKBBBBBBKKB..',
+  '.BBBPKBBBBKPBBB.',
+  '.BBBPKKKKKKPBBB.',
+  'BBBBPKPBBPKPBBBB',
+  'BBBBPPPBBPPPBBBB',
+  'BBBBBBBBBBBBBBBB',
+  '.BBBBPPPPPPBBBB.',
+  '....PPPPPPPP....',
+  '....PPPPPPPPKK..',
+  '...KKPPPPPKKKKK.',
+  '...KKKPPPKKKKKK.',
+  '....KKK..KKKKK..',
+];
+const KOOPA_MAP = [
+  '................',
+  '............W...',
+  '...........WWW..',
+  '..........SWWW..',
+  '.........SSWWGS.',
+  '.........SSWWGS.',
+  '.........SSWWGS.',
+  '.........SSWWWS.',
+  '.........SSSWSSS',
+  '.........SSSSSGS',
+  '...GGGGG..SSSSSS',
+  '..GSGGGSG.SS.SSS',
+  '.GGGSGSGG.SS..SS',
+  '.GWWGSGGGGWSS.SS',
+  '.GWGSGSGGGWSS.S.',
+  '.SGSGGGSGSWSS...',
+  '.GSGGGGGSGWWSS..',
+  '.SGSGGGSGSGWS...',
+  '.GGGSGSGGGSWS...',
+  '.GGGGSGGGGGW....',
+  'WWWGSGSGGGWW....',
+  '..WWWGGSWWWSS...',
+  '.SSSWWWWWSSSSS..',
+  'SSSS......SSSSS.',
+];
+const KOOPA_RUN2 = [
+  '...........W....',
+  '..........WWW...',
+  '..........WWWS..',
+  '.........SWWGS..',
+  '.........SWWGSS.',
+  '.........SWWGSS.',
+  '.........SWWWSS.',
+  '.........SSWSSGS',
+  '.........SSSSSSS',
+  '...GGGGG.SS..SSS',
+  '..GSGGGSGWS...SS',
+  '..GGSGSGGWSS....',
+  '.GWWGSGGGGWSS...',
+  '.GWGSGSGGGWSSSS.',
+  '.SGSGGGSGSWSSS..',
+  '.GSGGGGGSGWWS...',
+  '.SGSGGGSGSGWS...',
+  '.GGGSGSGGGSWS...',
+  '.GGGGSGGGGGW....',
+  'WWWGSGSGGGWW....',
+  '.SWWWGGSWWWS....',
+  '.SSSWWWWWSSS....',
+  '.SSS....SSS.....',
+  '..SSS..SSS......',
+];
+const SHELL_MAP = [
+  '.....SGGGGS.....',
+  '....GGSSSSGG....',
+  '...GGSGGGGSGG...',
+  '...GSGGGGGGSG...',
+  '..GSGGGGGGGGSG..',
+  '..SGSGGGGGGSGS..',
+  '.SGGGSGGGGSGGGS.',
+  '.GGGGGSSSSGGGGG.',
+  'WWWGGSGGGGSGGWWW',
+  'WWWWSGGGGGGSWWWW',
+  '...WWGGGGGGWW...',
+  '....WWGGGGWW....',
+  '.....WWWWWW.....',
+  '......WWWW......',
+];
+const MUSH_MAP = [
+  '......SSSS......',
+  '.....SSSSRR.....',
+  '....SSSSRRRR....',
+  '...SSSSSRRRRR...',
+  '..SSSSSSSRRRSS..',
+  '.SSRRRSSSSSSSSS.',
+  '.SRRRRRSSSSSSSS.',
+  'SSRRRRRSSSSSRRSS',
+  'SSRRRRRSSSSSRRRS',
+  'SSSRRRSSSSSSSRRS',
+  'SSSSSSSSSSSSSSSS',
+  '.SRRRWWWWWWRRRS.',
+  '....WWWWWWWW....',
+  '....WWWWWWSW....',
+  '....WWWWWWSW....',
+  '.....WWWWSW.....',
+];
+const FLW1 = [
+  '....WWWWWWWW....',
+  '..WWWWWWWWWWWW..',
+  '.WWWSSSSSSSSWWW.',
+  'WWSSSRRRRRRSSSWW',
+  'WWSSSRRRRRRSSSWW',
+  '.WWWSSSSSSSSWWW.',
+  '..WWWWWWWWWWWW..',
+  '....WWWWWWWW....',
+  '.......GG.......',
+  'GGG....GG....GGG',
+  '.GGG...GG...GGG.',
+  '.GGGG..GG..GGGG.',
+  '..GGGG.GG.GGGG..',
+  '..GGGG.GG.GGGG..',
+  '...GGGGGGGGGG...',
+  '......GGGG......',
+];
+const FLW2 = [
+  '....PPPPPPPP....',
+  '..PPPPPPPPPPPP..',
+  '.PPPBBBBBBBBPPP.',
+  'PPBBBKKKKKKBBBPP',
+  'PPBBBKKKKKKBBBPP',
+  '.PPPBBBBBBBBPPP.',
+  '..PPPPPPPPPPPP..',
+  '....PPPPPPPP....',
+  '.......GG.......',
+  'GGG....GG....GGG',
+  '.GGG...GG...GGG.',
+  '.GGGG..GG..GGGG.',
+  '..GGGG.GG.GGGG..',
+  '..GGGG.GG.GGGG..',
+  '...GGGGGGGGGG...',
+  '......GGGG......',
+];
+const FLW3 = [
+  '....SSSSSSSS....',
+  '..SSSSSSSSSSSS..',
+  '.SSSHHHHHHHHSSS.',
+  'SSHHHRRRRRRHHHSS',
+  'SSHHHRRRRRRHHHSS',
+  '.SSSHHHHHHHHSSS.',
+  '..SSSSSSSSSSSS..',
+  '....SSSSSSSS....',
+  '.......GG.......',
+  'GGG....GG....GGG',
+  '.GGG...GG...GGG.',
+  '.GGGG..GG..GGGG.',
+  '..GGGG.GG.GGGG..',
+  '..GGGG.GG.GGGG..',
+  '...GGGGGGGGGG...',
+  '......GGGG......',
+];
+const FLW4 = [
+  '....WWWWWWWW....',
+  '..WWWWWWWWWWWW..',
+  '.WWWSSSSSSSSWWW.',
+  'WWSSSGGGGGGSSSWW',
+  'WWSSSGGGGGGSSSWW',
+  '.WWWSSSSSSSSWWW.',
+  '..WWWWWWWWWWWW..',
+  '....WWWWWWWW....',
+  '.......GG.......',
+  'GGG....GG....GGG',
+  '.GGG...GG...GGG.',
+  '.GGGG..GG..GGGG.',
+  '..GGGG.GG.GGGG..',
+  '..GGGG.GG.GGGG..',
+  '...GGGGGGGGGG...',
+  '......GGGG......',
+];
+const STAR1 = [
+  '......SS......',
+  '......SS......',
+  '.....SSSS.....',
+  '.....SSSS.....',
+  '....SSSSSS....',
+  'SSSSSSSSSSSSSS',
+  'SSSSSRSSRSSSSS',
+  '.SSSSRSSRSSSS.',
+  '..SSSRSSRSSS..',
+  '...SSSSSSSS...',
+  '...SSSSSSSS...',
+  '..SSSSSSSSSS..',
+  '..SSSSSSSSSS..',
+  '..SSSS..SSSS..',
+  '.SSS......SSS.',
+  '.SS........SS.',
+];
+const STAR2 = [
+  '......BB......',
+  '......BB......',
+  '.....BBBB.....',
+  '.....BBBB.....',
+  '....BBBBBB....',
+  'BBBBBBBBBBBBBB',
+  'BBBBBKBBKBBBBB',
+  '.BBBBKBBKBBBB.',
+  '..BBBKBBKBBB..',
+  '...BBBBBBBB...',
+  '...BBBBBBBB...',
+  '..BBBBBBBBBB..',
+  '..BBBBBBBBBB..',
+  '..BBBB..BBBB..',
+  '.BBB......BBB.',
+  '.BB........BB.',
+];
+const STAR3 = [
+  '......RR......',
+  '......RR......',
+  '.....RRRR.....',
+  '.....RRRR.....',
+  '....RRRRRR....',
+  'RRRRRRRRRRRRRR',
+  'RRRRRFRRFRRRRR',
+  '.RRRRFRRFRRRR.',
+  '..RRRFRRFRRR..',
+  '...RRRRRRRR...',
+  '...RRRRRRRR...',
+  '..RRRRRRRRRR..',
+  '..RRRRRRRRRR..',
+  '..RRRR..RRRR..',
+  '.RRR......RRR.',
+  '.RR........RR.',
+];
+const STAR4 = [
+  '......SS......',
+  '......SS......',
+  '.....SSSS.....',
+  '.....SSSS.....',
+  '....SSSSSS....',
+  'SSSSSSSSSSSSSS',
+  'SSSSSGSSGSSSSS',
+  '.SSSSGSSGSSSS.',
+  '..SSSGSSGSSS..',
+  '...SSSSSSSS...',
+  '...SSSSSSSS...',
+  '..SSSSSSSSSS..',
+  '..SSSSSSSSSS..',
+  '..SSSS..SSSS..',
+  '.SSS......SSS.',
+  '.SS........SS.',
+];
+const COIN1 = [
+  '..SSSSKK..',
+  '.SSSSSSKK.',
+  '.SSBBSSKK.',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  'SSBSSKSSKK',
+  '.SSKKSSKK.',
+  '.SSSSSSKK.',
+  '..SSSSKK..',
+];
+const COIN2 = [
+  '..BBBBKK..',
+  '.BBBBBBKK.',
+  '.BBBBBBKK.',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  'BBBBBKBBKK',
+  '.BBKKBBKK.',
+  '.BBBBBBKK.',
+  '..BBBBKK..',
+];
+const COIN3 = [
+  '..DDDDKK..',
+  '.DDDDDDKK.',
+  '.DDBBDDKK.',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  'DDBDDKDDKK',
+  '.DDKKDDKK.',
+  '.DDDDDDKK.',
+  '..DDDDKK..',
+];
+const FIRE1 = [
+  '.....R..',
+  '.RRR...R',
+  'RRSRR.R.',
+  'RSSSR..R',
+  'RSWSRRRR',
+  'RRSWSSR.',
+  '.RRSSRR.',
+  '..RRRR..',
+];
+const FIRE2 = [
+  '..RRRR..',
+  '.RRSSRR.',
+  'RRSWSSR.',
+  'RSWSSRR.',
+  'RSSRRR..',
+  'RRSR...R',
+  '.RRR.R..',
+  '..RRR.R.',
+];
+const FIRE3 = [
+  '..RRRR..',
+  '.RRSSRR.',
+  '.RSSWSRR',
+  'RRRRSWSR',
+  'R..RSSSR',
+  '.R.RRSRR',
+  'R...RRR.',
+  '..R.....',
+];
+const FIRE4 = [
+  '.R.RRR..',
+  '..R.RRR.',
+  'R...RSRR',
+  '..RRRSSR',
+  '.RRSSWSR',
+  '.RSSWSRR',
+  '.RRSSRR.',
+  '..RRRR..',
+];
+const EG_SPR   = makeSprite(GOOMBA_MAP, PAL_GOOMBA);
+const EK_SPR   = makeSprite(KOOPA_MAP, PAL_KOOPA);
+const KOOPA_RUN = [EK_SPR, makeSprite(KOOPA_RUN2, PAL_KOOPA)];
+const ES_SPR   = makeSprite(SHELL_MAP, PAL_KOOPA);
+const PAL_KOOPA_RED = { G: '#d82800', S: '#fc9838', W: '#fcfcfc' };   // 红龟（原版红壳：边缘折返巡逻）
+const EK_SPR_R = makeSprite(KOOPA_MAP, PAL_KOOPA_RED);
+const KOOPA_RUN_R = [EK_SPR_R, makeSprite(KOOPA_RUN2, PAL_KOOPA_RED)];
+const ES_SPR_R = makeSprite(SHELL_MAP, PAL_KOOPA_RED);
+const MUSH_SPR = makeSprite(MUSH_MAP, { R: '#d82800', S: '#fc9838', W: '#fcfcfc' });
+const ONEUP_SPR = makeSprite(MUSH_MAP, { R: '#00a800', S: '#fc9838', W: '#fcfcfc' });   // 1UP：绿蘑菇
+const FLW_SPRS = [makeSprite(FLW1, PAL_ITEM), makeSprite(FLW2, PAL_ITEM), makeSprite(FLW3, PAL_ITEM), makeSprite(FLW4, PAL_ITEM)];
+const STAR_SPRS = [makeSprite(STAR1, PAL_ITEM), makeSprite(STAR2, PAL_ITEM), makeSprite(STAR3, PAL_ITEM), makeSprite(STAR4, PAL_ITEM)];
+const COIN_SPRS = [makeSprite(COIN1, PAL_ITEM), makeSprite(COIN2, PAL_ITEM), makeSprite(COIN3, PAL_ITEM)];
+const FIRE_SPRS = [makeSprite(FIRE1, PAL_ITEM), makeSprite(FIRE2, PAL_ITEM), makeSprite(FIRE3, PAL_ITEM), makeSprite(FIRE4, PAL_ITEM)];
+const coinFrames = COIN_SPRS;                              // 兼容旧引用（瓦片金币/金币弹出动效）
+const CAP_SPR = makeSprite(['..RRRR..', '.RRRRRR.', 'HHHHHHHH'], PAL);   // 受击飞走的帽子
+const PRINCESS_MAP = [
+  '...S.SS.S.......',
+  '...SSSSSS.......',
+  '..RRRRRRRR......',
+  '.RRRRRRRRRR.....',
+  '..RRRS.SRRRR....',
+  '...RSS.SSRSR....',
+  '..SSSSSSSRSR....',
+  '...SSSSSSSSRR...',
+  '..SRRRSSSSSRR...',
+  '..SRRSSSSRRRR...',
+  '...SSSSSSRRRR...',
+  '...RRWSSRWRRR...',
+  '..RRWSSWWWWRR...',
+  '..RSWWWWSSWRR...',
+  '.SSSSSSSSSWRR...',
+  '..SSSSSSSWRRR...',
+  '....RRWWWWRR....',
+  '...WWWWWWWWWW...',
+  '..WWWWWWWWWWWW..',
+  '..WWWWWWWWWWWW..',
+  '.WWWWRRRRRRWWWW.',
+  '.RRRRRRRRRRRRRR.',
+  '.RRRRRWWWWRRRRR.',
+  'WWWWWWWWWWWWWWWW',
+];
+const FLAGC_MAP = [
+  '.S...........',
+  'SSS..........',
+  '.S...........',
+  '.RWWWWWWWWWWW',
+  '.RWWWWWRWWWWW',
+  '.RWWWWWRWWWWW',
+  '.RWWRRRRRRRWW',
+  '.RWWWRRRRRWWW',
+  '.RWWWWRRRWWWW',
+  '.RWWWRRWRRWWW',
+  '.RWWWRWWWRWWW',
+  '.RWWWWWWWWWWW',
+  '.R...........',
+  '.R...........',
+  '.R...........',
+  '.R...........',
+];
+const PRINCESS_SPR = makeSprite(PRINCESS_MAP, PAL);   // 通关画面：公主（原版三色系）
+const FLAGC_SPR   = makeSprite(FLAGC_MAP, PAL);       // 城堡升旗
+/* 食人花（16×32 = 32×64）：SMB3 风格——白厚唇环绕大张嘴 + 双档红头散白斑
+ *  + 深浅绿茎 + 基部双叶，黑描边，缩回时由管口裁剪线遮住 */
+const PLANT_MAP = [
+  '.....KKKKKK.....',
+  '...KKRRRRRKKK...',
+  '..KRRrWWRRRRRK..',
+  '..KRWWRRRRWWrK..',
+  '.KRRrRWWRRRRrRK.',
+  '.KRWWRRRRRWWRK..',
+  '.KRRRRRRRRRRrRK.',
+  'KWWWWWWWWWWWWWWK',
+  'KKWWWWWWWWWWWWKK',
+  'KKKKKKKKKKKKKKKK',
+  'KKWWWWWWWWWWWWKK',
+  'KWWWWWWWWWWWWWWK',
+  '.KRRRRRRRRRRrRK.',
+  '.KRWWRRRRRWWrK..',
+  '..KRRrWWRRRRK...',
+  '..KRRRRRRRRRK...',
+  '...KKRRrRRKK....',
+  '.....KKKKK......',
+  '......KCLK......',
+  '......KCLK......',
+  '......KCLK......',
+  '......KCLK......',
+  '..KK..KCLK..KK..',
+  '.KCCCKKCLKKCCCK.',
+  'KCCcCKKCLKKCcCCK',
+  'KCCcCKKCLKKCcCCK',
+  '.KCCCKKCLKKCCCK.',
+  '..KKK.KCLK.KKK..',
+  '......KCLK......',
+  '......KCLK......',
+  '......KCLK......',
+  '......KKKK......',
+];
+const PAL_PLANT = { K: '#202020', R: '#e02020', r: '#a01818', W: '#ffffff',
+                    C: '#22ac38', L: '#7ae048', c: '#0e6a24' };            // 食人花配色保持不变
+const PLANT_SPR  = makeSprite(PLANT_MAP, PAL_PLANT);       // 食人花（红苞白点·黑描边）
+
+/* ---- 背景：天空渐变 + 云 + 山丘（同速跟随，无视差） ---- */
+const SKY_GRADIENT = (() => {
+  const lg = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+  lg.addColorStop(0, '#3f6fe8'); lg.addColorStop(0.65, '#5c94fc'); lg.addColorStop(1, '#9ecbff');
+  return lg;
+})();
+const clouds = [];
+for (let i = 0; i < 8; i++) clouds.push({ x: 120 + i * 420 + (i % 3) * 90, y: 48 + (i % 4) * 42 });
+/* C1：背景云/山丘/灌木预渲染到离屏画布，运行时只 drawImage（与瓦片/角色同一"预渲染一切"策略，
+ *      不再每帧用逐行 fillRect 现画） */
+function bake(w, h, draw) { const c = makeCanvas(w, h); draw(c.getContext('2d')); return c; }
+const CLOUD_SPR = bake(68, 32, g => {
+  rect(g, 0, 16, 68, 16, '#ffffff'); rect(g, 12, 8, 44, 12, '#ffffff'); rect(g, 22, 0, 22, 10, '#ffffff');
+});
+function bakeHill(big) {
+  const w = big ? 160 : 80, h = big ? 38 : 19;
+  return bake(w, h, g => { for (let r = 0; r < h; r++) {
+    const half = Math.round(w * (r + 1) / h / 2);
+    rect(g, w / 2 - half, r, half * 2, 1, '#1ea41e');
+    rect(g, w / 2 - half, r, 1, 1, '#0c5c0c'); rect(g, w / 2 + half - 1, r, 1, 1, '#0c5c0c');
+  }});
+}
+function bakeBush(wide) {
+  const n = wide ? 3 : 2, w = (n - 1) * 26 + 34;
+  return bake(w, 20, g => {
+    for (let i = 0; i < n; i++) {
+      rect(g, i * 26, 6, 34, 14, '#22ac38');           // 团身
+      rect(g, i * 26 + 8, 0, 18, 6, '#22ac38');        // 顶部凸起
+    }
+    for (let i = 0; i < n; i++) rect(g, i * 26, 18, 34, 2, '#0e6a24');   // 底部压暗
+  });
+}
+const HILL_BIG = bakeHill(true), HILL_SMALL = bakeHill(false);
+const BUSH_WIDE = bakeBush(true), BUSH_SMALL = bakeBush(false);
+function drawCloud(x, y) { ctx.drawImage(CLOUD_SPR, x, y - 8); }
+function drawHill(sx, groundY, big) { ctx.drawImage(big ? HILL_BIG : HILL_SMALL, sx, groundY - (big ? 38 : 19)); }
+function drawBush(sx, groundY, wide) { ctx.drawImage(wide ? BUSH_WIDE : BUSH_SMALL, sx, groundY - 20); }
+const decors = [];
+for (let c = 0; c < MAP_W; c += 48) {
+  decors.push({ kind: 'hill', col: c, big: true });
+  decors.push({ kind: 'bush', col: c + 11, wide: false });
+  decors.push({ kind: 'hill', col: c + 16, big: false });
+  decors.push({ kind: 'bush', col: c + 23, wide: true });
+  decors.push({ kind: 'bush', col: c + 41, wide: false });
+}
+
+/* ---- HUD 像素数字（3×5 点阵） ---- */
+const PIX_GLYPHS = {
+  '0': '111101101101111', '1': '010110010010111', '2': '111001111100111',
+  '3': '111001111001111', '4': '101101111001001', '5': '111100111001111',
+  '6': '111100111101111', '7': '111001001001001', '8': '111101111101111',
+  '9': '111101111001111', 'X': '000101010101000',
+};
+function drawGlyph(ch, x, y, s, col) {
+  const g = PIX_GLYPHS[ch]; if (!g) return;
+  ctx.fillStyle = col;
+  for (let i = 0; i < 15; i++)
+    if (g[i] === '1') ctx.fillRect(x + (i % 3) * s, y + ((i / 3) | 0) * s, s, s);
+}
+function drawPixNum(n, width, x, y, s, col) {
+  const str = String(Math.max(0, n | 0)).padStart(width, '0');
+  for (const ch of str) { drawGlyph(ch, x, y, s, col); x += 4 * s; }
+}
+
+/* ---- 渲染主入口：瓦片只遍历可视列区间 visibleRange() ---- */
+function render() {
+  const dark = world === 'under' || cur.theme === 'under';   // 地下主题：黑底 + 全蓝瓦片/管道
+  const TS = dark ? tileSpritesU : tileSprites, PS = dark ? PIPES_UNDER : PIPES_OVER;
+  if (dark) rect(ctx, 0, 0, VIEW_W, VIEW_H, '#0c0c16');   // 地下：黑底，无天光云丘
+  else {
+  ctx.fillStyle = SKY_GRADIENT; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  for (const c of clouds) { const sx = c.x - camX; if (sx > -80 && sx < VIEW_W + 80) drawCloud(sx, c.y); }
+  for (const d of decors) {
+    const sx = Math.round(d.col * TILE - camX);
+    if (sx <= -220 || sx >= VIEW_W + 220) continue;
+    if (d.kind === 'hill') drawHill(sx, GROUND_ROW * TILE, d.big);
+    else drawBush(sx, GROUND_ROW * TILE, d.wide);
+  }
+  }
+  for (const it of items) drawItem(it);              // 先画道具：升起阶段被砖块遮住
+
+  const [x0, x1] = visibleRange();
+  for (let ty = 0; ty < MAP_H; ty++) for (let tx = x0; tx <= x1; tx++) {
+    const t = map[ty][tx];
+    if (!t) continue;
+    let oy = 0;
+    const b = bumps.get(tx + ',' + ty);
+    if (b) oy = -Math.round(Math.sin(Math.PI * b.t / BUMP_T) * 6);   // 被顶砖弹跳偏移
+    const sx = Math.round(tx * TILE - camX), sy = Math.round(ty * TILE + oy);
+    if (t === T_HIDDEN) {                             // 隐藏砖：平时不可见，每约1.8s 微光闪现一下（原版的位置提示）
+      const ph = coinT % 1.8;
+      if (ph < 0.22) {
+        ctx.globalAlpha = 0.22 + 0.35 * Math.sin(Math.PI * ph / 0.22);
+        ctx.drawImage(TS[T_QBLOCK], sx, sy);
+        ctx.globalAlpha = 1;
+      }
+      continue;
+    }
+    if (t === T_COIN) ctx.drawImage(coinFrames[Math.floor(coinT * 8) % 3], sx, sy);
+    else if (t === T_PIPE) {                          // 管道：地上管口朝上；吊管（下方无管且上方有管）管口朝下=顶盖上下翻转
+      const above = tileAt(tx, ty - 1) === T_PIPE, below = tileAt(tx, ty + 1) === T_PIPE;
+      const left = tileAt(tx - 1, ty) !== T_PIPE;
+      if (!below && above) {
+        ctx.save(); ctx.translate(sx, sy); ctx.scale(1, -1);
+        ctx.drawImage(left ? PS.TL : PS.TR, 0, -TILE);
+        ctx.restore();
+      } else ctx.drawImage(!above ? (left ? PS.TL : PS.TR) : (left ? PS.BL : PS.BR), sx, sy);
+    }
+    else ctx.drawImage(TS[t], sx, sy);
+  }
+  if (world === 'over') drawPlants();
+  drawLifts();
+  drawFlag();
+  drawEffects();
+  for (const e of enemies) drawEnemy(e);
+  if (bossRoom.active) drawBossRoom();              // Boss 房：掉落金币 + 库巴（画在角色之前）
+  for (const f of fireballs) drawFireball(f);
+  drawPlayer();
+  if (bossRoom.active) drawBossRoomFx();            // 锤子 / 火焰画在角色之上：贴脸威胁必须可读
+  if (world === 'under' && !bossRoom.active) drawSidePipe();   // 横管画在角色之上：滑入即被遮住
+  if (bossRoom.active) drawRoomEntryPipe();         // Boss 房入口横管（左）
+  drawCastleFlag();                               // 城堡升旗（画在城堡前：塔身遮挡未升出部分）
+  drawCastle();                                   // 城堡盖在角色上：走进门洞即“没入”
+  drawHUD();
+}
+
+/** 食人花渲染：缩回管内不绘制；伸出时精灵底边贴在管口，管口以下裁掉（藏在管里） */
+function drawPlants() {
+  for (const pl of plants) {
+    if (pl.exposed < 1) continue;
+    const sx = Math.round(pl.cx - PLANT_SPR_W / 2 - camX);
+    if (sx < -PLANT_SPR_W || sx > VIEW_W) continue;
+    ctx.save();
+    if (pl.down) {                                   // 吊管食人花：精灵上下翻转，管口以下可见（管内部分裁掉）
+      ctx.beginPath(); ctx.rect(sx, Math.round(pl.mouthY), PLANT_SPR_W, VIEW_H - pl.mouthY); ctx.clip();
+      ctx.translate(sx, Math.round(pl.mouthY)); ctx.scale(1, -1);
+      ctx.drawImage(PLANT_SPR, 0, -Math.round(pl.exposed));
+    } else {
+      ctx.beginPath(); ctx.rect(sx, 0, PLANT_SPR_W, pl.mouthY); ctx.clip();
+      ctx.drawImage(PLANT_SPR, sx, Math.round(pl.mouthY - pl.exposed));
+    }
+    ctx.restore();
+  }
+}
+
+/** 地下出口横管（程序化像素，管口朝左，画在角色之上；原版奖励房管道为蓝色） */
+function drawSidePipe() {
+  const room = (cur.unders && cur.unders[roomIdx]) || { w: 30 };
+  const x = Math.round((room.w - 4) * TILE - camX), y = 13 * TILE;
+  const w = 3 * TILE, h = 2 * TILE;
+  rect(ctx, x + 12, y + 5, w - 12, h - 10, '#0058f8');   // 管身
+  rect(ctx, x + 18, y + 5, 9, h - 10, '#7ca8fc');        // 高光
+  rect(ctx, x, y, 12, h, '#0058f8');                     // 竖唇（管口）
+  rect(ctx, x, y, 4, h, '#7ca8fc');
+  rect(ctx, x + 9, y, 3, h, '#000000');
+  rect(ctx, x, y, 12, 3, '#000000'); rect(ctx, x, y + h - 3, 12, 3, '#000000');
+}
+
+/** 终点旗杆：杆身 + 杆顶球 + 三角旗（抓杆后旗子降下） */
+function drawFlag() {
+  const x = Math.round(GOAL_COL * TILE - camX);
+  if (x < -64 || x > VIEW_W + 64) return;
+  const gy = GROUND_ROW * TILE, topY = gy - 8 * TILE;
+  rect(ctx, x + 4, gy - TILE, 24, TILE, '#9a6a30');                  // 杆底基座石块（原版）
+  rect(ctx, x + 4, gy - TILE, 24, 3, '#5a3a10'); rect(ctx, x + 4, gy - 3, 24, 3, '#5a3a10');
+  rect(ctx, x + 4, gy - TILE, 3, TILE, '#5a3a10'); rect(ctx, x + 25, gy - TILE, 3, TILE, '#5a3a10');
+  rect(ctx, x + 14, topY, 4, 8 * TILE, '#dfe6ea');                   // 旗杆
+  rect(ctx, x + 12, topY - 6, 8, 6, '#ffd23f');                      // 杆顶
+  const fy = topY + 4 + flagProg * (7 * TILE);
+  ctx.fillStyle = '#e63946';                                          // 三角旗
+  for (let i = 0; i < 12; i++) ctx.fillRect(x + 18, fy + i * 2, Math.max(2, 18 - i * 1.6), 2);
+}
+
+/** 终点城堡（程序化像素）：城垛 + 中央塔 + 黑门洞 + 窗 */
+/** 城堡升旗：进城堡后旗子从塔身后升起（画在城堡之前，塔身遮挡未升出部分） */
+function drawCastleFlag() {
+  if (castleFlagT < 0 || world !== 'over') return;
+  const gy = GROUND_ROW * TILE, cx = CASTLE_COL * TILE;
+  if (cx - camX < -220 || cx - camX > VIEW_W + 220) return;
+  const prog = Math.min(1, castleFlagT / 1.2);
+  const fy = (gy - 96) - 96 * prog;                      // 从塔身内升到塔顶上方（终点整旗露出）
+  ctx.drawImage(FLAGC_SPR, cx + 80 - 13, fy, 26, 32);
+}
+function drawCastle() {
+  const x = Math.round(CASTLE_COL * TILE - camX), gy = GROUND_ROW * TILE;
+  if (x < -260 || x > VIEW_W + 260) return;
+  const B = '#b5482a', D = '#3d1408', L = '#e08060';
+  const W = 5 * TILE, H = 4 * TILE, by = gy - H;
+  rect(ctx, x, by, W, H, B);                                            // 主堡体
+  for (let r = 1; r < 8; r++) { ctx.fillStyle = D; ctx.fillRect(x, by + r * 16, W, 1); }  // 砖缝
+  for (let i = 0; i < 5; i++) rect(ctx, x + i * TILE + 6, by - 12, 20, 12, B);           // 城垛
+  const tw = 2 * TILE, tx0 = x + (W - tw) / 2;
+  rect(ctx, tx0, by - 12 - TILE, tw, TILE, B);                          // 中央塔
+  rect(ctx, tx0 + 4, by - 12 - TILE - 10, 14, 10, B); rect(ctx, tx0 + tw - 18, by - 12 - TILE - 10, 14, 10, B);
+  rect(ctx, x, by, W, 2, L); rect(ctx, tx0, by - 12 - TILE, tw, 2, L);  // 高光
+  rect(ctx, x + W / 2 - 17, gy - 48, 34, 48, D);                        // 门洞拱框
+  rect(ctx, x + W / 2 - 13, gy - 44, 26, 44, '#181818');                // 门洞
+  rect(ctx, x + 18, by + 20, 14, 14, D); rect(ctx, x + W - 32, by + 20, 14, 14, D);      // 窗
+}
+
+function drawEffects() {
+  for (const e of effects) {
+    const sx = Math.round(e.x - camX), sy = Math.round(e.y);
+    if (e.type === 'coin') ctx.drawImage(coinFrames[Math.floor(coinT * 10) % 3], sx, sy);
+    else if (e.type === 'frag') {
+      rect(ctx, sx, sy, 7, 7, '#b5482a'); rect(ctx, sx + 1, sy + 1, 3, 3, '#e08060');
+    } else if (e.type === 'cap') {
+      ctx.drawImage(CAP_SPR, sx, sy);
+    } else if (e.type === 'dust') {                     // 打滑扬尘
+      ctx.globalAlpha = Math.max(0, 1 - e.t / e.life);
+      rect(ctx, sx, sy, 4, 4, '#e8e8e8');
+      ctx.globalAlpha = 1;
+    } else if (e.type === 'firework') {
+      ctx.globalAlpha = Math.max(0, 1 - e.t / e.life);
+      rect(ctx, sx - 2, sy - 2, 4, 4, e.col || '#ffd23f');
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#3d1408'; ctx.fillText(e.txt, sx + 1, sy + 1);
+      ctx.fillStyle = e.col || '#ffe066'; ctx.fillText(e.txt, sx, sy);
+    }
+  }
+}
+
+function drawItem(it) {
+  if (it.gone) return;
+  const sx = Math.round(it.x - camX), sy = Math.round(it.y);
+  let spr;
+  if (it.kind === 'star') spr = STAR_SPRS[Math.floor(coinT * 8) % 4];         // 原版四色循环闪
+  else if (it.kind === 'flower') spr = FLW_SPRS[Math.floor(coinT * 8) % 4];   // 火之花原版调色轮转
+  else if (it.kind === 'oneup') spr = ONEUP_SPR;
+  else spr = MUSH_SPR;
+  ctx.drawImage(spr, sx + Math.round((it.w - spr.width) / 2), sy + it.h - spr.height);   // 底部对齐居中
+}
+
+/** 升降台渲染：像素石板台面（描边+高光+面缝），与整体画风一致 */
+function drawLifts() {
+  for (const L of lifts) {
+    const sx = Math.round(L.x - camX), sy = Math.round(L.y);
+    if (sx < -128 || sx > VIEW_W + 128) continue;
+    ctx.fillStyle = '#303830'; ctx.fillRect(sx, sy, L.w, L.h);
+    ctx.fillStyle = '#b0c0a8'; ctx.fillRect(sx + 2, sy + 2, L.w - 4, L.h - 4);
+    ctx.fillStyle = '#e0ead8';
+    for (let k = 0; k < 3; k++) ctx.fillRect(sx + 6 + k * 32, sy + 2, 22, 4);
+    ctx.fillStyle = '#809078';
+    for (let k = 0; k < 4; k++) ctx.fillRect(sx + 8 + k * 24, sy + 9, 14, 3);
+  }
+}
+
+function drawEnemy(e) {
+  const sx = Math.round(e.x - camX), sy = Math.round(e.y);
+  if (sx < -64 || sx > VIEW_W + 64) return;
+  let spr, dx, dy, mirror = false;
+  if (e.kind === 'goomba') {
+    if (e.squashT > 0) {                                                // 压扁：整帧压成贴地扁片
+      ctx.drawImage(EG_SPR, sx - 4, sy + e.h - 10, 32, 10);
+      return;
+    }
+    spr = EG_SPR; dx = sx - 4; dy = sy + e.h - spr.height;
+    mirror = Math.floor(e.runT) % 2 === 1;                              // 走路两帧=左右镜像（原版）
+  } else if (e.kind === 'koopa' || e.kind === 'para') {
+    const setR = e.red;
+    spr = Math.abs(e.vx) > 15 ? (setR ? KOOPA_RUN_R : KOOPA_RUN)[Math.floor(e.runT) % 2] : (setR ? EK_SPR_R : EK_SPR);
+    dx = sx - 4; dy = sy + e.h - spr.height;
+    mirror = e.vx < 0;                                                  // 素材朝右：向左行走进镜像
+  } else {
+    spr = e.red ? ES_SPR_R : ES_SPR; dx = sx - 4; dy = sy + e.h - spr.height;              // 龟壳
+  }
+  ctx.save();
+  if (e.dead) {                                                         // 击飞：绕精灵中心倒转
+    const cx = dx + spr.width / 2, cy = dy + spr.height / 2;
+    ctx.translate(cx, cy); ctx.scale(1, -1); ctx.translate(-cx, -cy);
+  } else if (mirror) {
+    ctx.translate(dx + spr.width, dy); ctx.scale(-1, 1);
+    dx = 0; dy = 0;
+  }
+  ctx.drawImage(spr, dx, dy);
+  ctx.restore();
+  if (e.kind === 'para' && !e.dead) {                                   // 跳跳龟背翅：双翼两帧扑扇
+    const flap = Math.floor(gameTime * 8) % 2;
+    const wx = sx + 3, wy = sy - (flap ? 7 : 3);
+    ctx.fillStyle = '#fcfcfc';
+    ctx.fillRect(wx, wy, 9, 4);
+    ctx.fillRect(wx + 12, wy - (flap ? 2 : 0), 9, 4);
+    ctx.fillStyle = '#c8c8c8';
+    ctx.fillRect(wx + 2, wy + 4, 17, 2);
+  }
+}
+
+function drawFireball(f) {
+  const sx = Math.round(f.x - camX), sy = Math.round(f.y);
+  ctx.drawImage(FIRE_SPRS[Math.floor(f.t * 16) % 4], sx - 3, sy - 3);   // 原版火焰 16px 帧轮转，居中于碰撞盒
+}
+
+function drawPlayer() {
+  const p = player;
+  if (gameState === 'play' && morphT <= 0 && p.invulnT > 0 && Math.floor(p.invulnT * 16) % 2 === 0) return;  // 受击无敌闪烁（变身定格期间不隐藏，见 morphT 分支）
+  let set;                                               // 无敌星：红绿槽三循环（原版换色闪）；Boss 房买的「无敌」复用同一套视觉
+  const invT = p.starT > 0 ? p.starT : (bossRoom.active ? bossRoom.buffs.invincible : 0);
+  if (invT > 0) {
+    const cyc = p.mode === 'small' ? SP_STAR : p.mode === 'fire' ? SPF_STAR : SPB_STAR;
+    set = cyc[Math.floor(invT * 10) % 3];
+    if (invT < 3 && Math.floor(invT * 8) % 2 === 0)                   // 结束前3秒：普通/星色急促交替 = 到时预警
+      set = p.mode === 'small' ? SP : p.mode === 'fire' ? SPF : SPB;
+  } else set = p.mode === 'small' ? SP : p.mode === 'fire' ? SPF : SPB;
+  const skidding = p.onGround && ((input.left && p.vx > 20) || (input.right && p.vx < -20));
+  let spr = gameState === 'pole' ? set.climb
+          : !p.onGround ? set.jump
+          : p.crouch ? set.crouch
+          : skidding ? set.skid                                  // 原版急转身帧
+          : Math.abs(p.vx) > 15 ? set.run[Math.floor(p.runT) % 3] : set.idle;
+  if (morphT > 0) {                                    // 变身定格：新旧形态交替闪烁
+    const fromSet = morphFrom === 'small' ? SP : (morphFrom === 'fire' ? SPF : SPB);
+    spr = Math.floor(morphT * 12) % 2 === 0 ? fromSet.idle : set.idle;
+  }
+  ctx.save();
+  if (gameState === 'dying') {                                        // 死亡动画：正面举手帧，上跃坠落（原版）
+    ctx.translate(Math.round(p.x - camX) + p.w / 2, Math.round(p.y) + p.h / 2);
+    ctx.drawImage(set.dead, -set.dead.width / 2, -set.dead.height / 2);
+    ctx.restore(); return;
+  }
+  const dx = Math.round((p.w - spr.width) / 2), dy = p.h - spr.height;   // 底部对齐+水平居中（镜像安全）
+  /* 大形态精灵比碰撞盒高出 ~12px：探进实心砖的部分源裁剪（头顶被砖遮住，脚不离地） */
+  let cropTop = 0;
+  const over = spr.height - p.h;
+  if (over > 0) {
+    const sprTop = p.y - over;
+    const c0 = Math.floor((p.x + 3) / TILE), c1 = Math.floor((p.x + p.w - 3) / TILE);
+    for (let r = Math.max(0, Math.floor(sprTop / TILE)); r * TILE < p.y; r++)
+      for (let c = c0; c <= c1; c++)
+        if (isSolid(c, r)) cropTop = Math.max(cropTop, Math.min(over, (r + 1) * TILE - sprTop));
+  }
+  ctx.translate(Math.round(p.x - camX) + (p.facing < 0 ? p.w : 0), Math.round(p.y));
+  if (p.facing < 0) ctx.scale(-1, 1);
+  if (gameState === 'pipeIn') ctx.globalAlpha = Math.max(0, 1 - seqT / 0.65);   // 入管渐隐
+  if (cropTop > 0) ctx.drawImage(spr, 0, cropTop, spr.width, spr.height - cropTop,
+                                 dx, dy + cropTop, spr.width, spr.height - cropTop);
+  else ctx.drawImage(spr, dx, dy);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function shadowText(t, x, y, size, col) {
+  ctx.font = 'bold ' + size + 'px monospace';
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(t, x + 1, y + 1);
+  ctx.fillStyle = col || '#ffffff';  ctx.fillText(t, x, y);
+}
+
+function drawHUD() {
+  ctx.textAlign = 'left';
+  shadowText('SCORE', 14, 22, 12, '#cfe3ff');
+  drawPixNum(score, 6, 14, 27, 2, '#ffffff');
+  ctx.drawImage(coinFrames[Math.floor(coinT * 8) % 3], 152, 25, 20, 20);
+  drawGlyph('X', 178, 29, 2, '#ffe066');
+  drawPixNum(coins, 2, 192, 27, 2, '#ffe066');
+  ctx.drawImage(SP.idle, 246, 21, 17, 21);                 // 生命：小马里奥头像
+  drawGlyph('X', 268, 29, 2, '#ffffff');
+  drawPixNum(lives, 1, 282, 27, 2, '#ffffff');
+  ctx.textAlign = 'center';                                // 最高分（顶部居中）
+  shadowText('HI', VIEW_W / 2 - 24, 22, 12, '#cfe3ff');
+  drawPixNum(hiScore, 6, VIEW_W / 2 - 24, 27, 2, '#ffd23f');
+  ctx.textAlign = 'right';
+  shadowText(LEVEL_NAME, VIEW_W - 14, 32, 16);
+  const tl = Math.max(0, Math.ceil(TIME_LIMIT - gameTime));          // 倒计时：≤60s 红闪
+  const timeBlink = tl <= 60 && Math.floor(coinT * 2) % 2 === 0;
+  shadowText('TIME', VIEW_W - 14, 50, 12, timeBlink ? '#ff5a5a' : '#cfe3ff');
+  drawPixNum(tl, 3, VIEW_W - 14 - 24, 54, 2, timeBlink ? '#ff5a5a' : '#ffffff');
+  if (!audioOn) shadowText('静音(M)', VIEW_W - 14, 68, 12, '#cfe3ff');
+  ctx.textAlign = 'left';
+  if (showFps) {
+    ctx.fillStyle = fpsS > 55 ? '#9ff0a8' : fpsS > 40 ? '#ffd23f' : '#ff5a5a';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(Math.round(fpsS) + ' FPS', VIEW_W / 2 - 30, VIEW_H - 12);
+  }
+
+  drawBossRoomHUD();                                 // Boss 房专属 HUD（先画，结算浮层可覆盖它）
+  const blink = Math.floor(coinT * 2) % 2 === 0;
+  if (gameState === 'win') {
+    ctx.fillStyle = 'rgba(10,10,30,.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.textAlign = 'center';
+    shadowText('通 关 ！', VIEW_W / 2, VIEW_H / 2 - 84, 52, '#ffd23f');
+    /* 仪式感：马里奥与公主同框（原版通关构图，2x 整数缩放保持像素感） */
+    const baseY = VIEW_H / 2 + 4;
+    ctx.drawImage(PRINCESS_SPR, VIEW_W / 2 + 22, baseY - 96, 64, 96);
+    ctx.drawImage(SP.idle, VIEW_W / 2 - 72, baseY - 64, 48, 64);
+    shadowText('Mario ♥ 公主', VIEW_W / 2, VIEW_H / 2 - 12, 20, '#ff9de2');
+    shadowText('高度加成 +' + poleBonus + ' ・ 时间加成 +' + timeBonus + '（×50）', VIEW_W / 2, VIEW_H / 2 + 22, 18, '#9ff0a8');
+    shadowText('得分 ' + score + ' ・ 金币 ' + coins + ' ・ 最高分 ' + hiScore,
+               VIEW_W / 2, VIEW_H / 2 + 50, 18);
+    if (blink) shadowText('按 R / 点击【Ⅱ】返回标题', VIEW_W / 2, VIEW_H / 2 + 86, 16, '#9fb4d0');
+    ctx.textAlign = 'left';
+  } else if (gameState === 'gameover') {
+    ctx.fillStyle = 'rgba(10,10,30,.72)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.textAlign = 'center';
+    shadowText('GAME OVER', VIEW_W / 2, VIEW_H / 2 - 30, 52, '#ff5a5a');
+    shadowText('得分 ' + score + ' ・ 金币 ' + coins + ' ・ 最高分 ' + hiScore,
+               VIEW_W / 2, VIEW_H / 2 + 14, 20);
+    if (blink) shadowText('按 R / 点击【Ⅱ】重开', VIEW_W / 2, VIEW_H / 2 + 50, 16, '#9fb4d0');
+    ctx.textAlign = 'left';
+  } else if (gameState === 'title') {
+    ctx.fillStyle = 'rgba(10,10,30,.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.textAlign = 'center';
+    shadowText('像素马里奥', VIEW_W / 2, VIEW_H / 2 - 48, 52, '#ffd23f');
+    shadowText('最高分 ' + hiScore, VIEW_W / 2, VIEW_H / 2 - 6, 16, '#ffd23f');
+    /* 选关菜单：原版 SMB 文字菜单风——深色条 + 白字 + 跑动小马里奥当光标 */
+    const M = TITLE_MENU, n = LEVELS.length;
+    M.x0 = VIEW_W / 2 - M.w / 2;
+    const stripH = M.h * n + (n - 1) * (M.gap - M.h) + 16;
+    rect(ctx, M.x0 - 12, M.y0 - 8, M.w + 24, stripH, 'rgba(10,10,26,.55)');
+    ctx.textAlign = 'left';
+    for (let i = 0; i < n; i++) {
+      const rowMid = M.y0 + i * M.gap + M.h / 2, sel = i === titleSel, locked = levelLocked(i);
+      if (sel && !locked) ctx.drawImage(SP.run[Math.floor(coinT * 8) % 3], M.x0 + 10, rowMid - 16, 21, 32);   // 光标：原地跑的小马里奥
+      shadowText(LEVELS[i].name, M.x0 + 52, rowMid + 6, 20, locked ? '#54607a' : (sel ? '#ffffff' : '#7e93ba'));
+      const best = progress.best[i] || 0;
+      if (locked) {                                   // 像素锁：未解锁
+        const lx = M.x0 + M.w - 52, ly = rowMid - 10;
+        ctx.fillStyle = '#54607a';
+        ctx.fillRect(lx + 1, ly, 8, 3); ctx.fillRect(lx, ly + 2, 10, 8);
+        ctx.fillStyle = '#12121e';
+        ctx.fillRect(lx + 4, ly + 4, 2, 4);
+        shadowText('通关上一关解锁', lx - 108, rowMid + 5, 12, '#54607a');
+      } else {
+        if (progress.best[i] !== undefined) {         // 通关星标 + 单关最高分
+          const sx = M.x0 + M.w - 96;
+          ctx.fillStyle = '#ffd23f';
+          ctx.fillRect(sx + 3, rowMid - 9, 2, 2); ctx.fillRect(sx + 8, rowMid - 9, 2, 2);
+          ctx.fillRect(sx, rowMid - 6, 13, 3); ctx.fillRect(sx + 2, rowMid - 3, 9, 2);
+          ctx.fillRect(sx + 4, rowMid - 1, 5, 2);
+          shadowText('最高 ' + best, sx + 20, rowMid + 5, 13, sel ? '#ffd23f' : '#b8a23f');
+        } else {
+          shadowText(LEVELS[i].under ? '地下奖励房' : '地上', M.x0 + M.w - 40, rowMid + 5, 13, sel ? '#9ff0a8' : '#5f7194');
+        }
+      }
+    }
+    ctx.textAlign = 'center';
+    if (blink) shadowText('↑↓ 选关 ・ 空格/回车 开始（或点击关卡）', VIEW_W / 2, M.y0 - 8 + stripH + 22, 17, '#ffffff');
+    shadowText('A/D 移动 ・ Shift 跑 ・ S/↓ 蹲・入管 ・ J/X 火球 ・ M 静音', VIEW_W / 2, M.y0 - 8 + stripH + 46, 14, '#9fb4d0');
+    ctx.textAlign = 'left';
+  } else if (gameState === 'pause') {
+    ctx.fillStyle = 'rgba(10,10,30,.6)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.textAlign = 'center';
+    shadowText('已暂停', VIEW_W / 2, VIEW_H / 2 - 20, 40, '#ffffff');
+    shadowText('P / Esc 继续 ・ R 重开 ・ M ' + (audioOn ? '静音' : '取消静音'),
+               VIEW_W / 2, VIEW_H / 2 + 24, 16, '#cfe3ff');
+    ctx.textAlign = 'left';
+  }
+}
+
+/* ========================= 10. 主循环（固定时间步） ========================= */
+let showFps = false, fpsS = 60;
+
+let last = performance.now(), acc = 0;
+let lowT = 0, lowPerf = false;                       // 低端机单向降采样状态
+function frame(now) {
+  requestAnimationFrame(frame);
+  let ft = (now - last) / 1000;
+  last = now;
+  if (ft > 0.25) ft = 0.25;                            // 切后台回来防“时间爆炸”
+  if (ft > 0) fpsS += (1 / ft - fpsS) * 0.06;          // FPS 指数平滑
+  if (!lowPerf) {                                      // 持续 <42fps 超 2 秒 → 内部分辨率降至 75%
+    lowT = fpsS < 42 ? lowT + ft : 0;
+    if (lowT > 2) {
+      lowPerf = true;
+      cvs.width = 720; cvs.height = 408;
+      ctx.setTransform(0.75, 0, 0, 0.75, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+    }
+  }
+  acc += ft;
+  let n = 0;
+  while (acc >= STEP && n < 8) {                       // 固定步长推进物理（标题/暂停/顿帧冻结）
+    if (hitStopT > 0) hitStopT -= STEP;                // 打击顿帧：世界微冻结，画面不糊
+    else if (gameState !== 'pause' && gameState !== 'title') update(STEP);
+    else coinT += STEP;                                // 标题下金币动画照常闪烁
+    acc -= STEP; n++;
+  }
+  if (n === 8) acc = 0;                                // 追帧上限，防螺旋恶化
+  render();                                            // 渲染每帧一次
+  bgmTick();                                           // BGM 排音（用户手势解锁 AudioContext 后自动起播）
+}
+respawn();
+requestAnimationFrame(frame);
+
+/* ======================== 11. 调试 / 自动化钩子 ======================== */
+window.__ENGINE = {
+  TILE, tileSize, VIEW_W, VIEW_H, STEP, MAX_SPEED, JUMP_V, GOOMBA_SPEED, KOOPA_SPEED, SHELL_SPEED,
+  player, input, get map() { return map; }, enemies, items, fireballs, get enemySpawns() { return spawns; }, plants,
+  get levelIdx() { return levelIdx; }, get levelCount() { return LEVELS.length; },
+  get goalCol() { return GOAL_COL; }, get timeLimit() { return TIME_LIMIT; }, get levelName() { return LEVEL_NAME; },
+  get mapW() { return MAP_W; }, get curUnder() { return (cur.unders || [])[roomIdx] || null; },
+  startLevel, completeLevel,
+  get world() { return world; }, get morphT() { return morphT; }, set morphT(v) { morphT = v; },
+  get hurry() { return hurry; },
+  PLANT_T, PLANT_CYCLE, PLANT_RISE,
+  get camX() { return camX; },
+  tileAt, isSolid, visibleRange, aabb, update, updateCamera,
+  setTile: (x, y, t) => { map[y][x] = t; },
+  respawn, respawnSafe, resetGame, startGame, bumpTile, headBump, spawnFromBlock, shootFireball,
+  tryStepUp, addStompScore, shellHitsEnemies,
+  setMode, hurtPlayer, die, sfx, addScore,
+  get gameState() { return gameState; }, set gameState(v) { gameState = v; },
+  get coins() { return coins; }, set coins(v) { coins = v; },
+  get score() { return score; }, set score(v) { score = v; },
+  get lives() { return lives; }, set lives(v) { lives = v; },
+  get hiScore() { return hiScore; }, get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
+  get fxCount() { return effects.length; }, get poolSize() { return FX_POOL.length; },
+  get audioOn() { return audioOn; },
+  get respawnCount() { return respawnCount; }, get comboStreak() { return comboStreak; },
+  get timeLeftInt() { return timeLeftInt; }, get timeBonus() { return timeBonus; },
+  get fxTypes() { return effects.map(e => e.type); }, multiBricks, starBricks,
+  get poleBonus() { return poleBonus; },
+  /* ---- Boss 奖励房（自动化测试入口） ---- */
+  bossRoom, T_SHOP, BR_SHOP, buildBossRoomMap, buyShopItem, enterBossRoom, closeBossRoom,
+  settleRoomCoins, roomCoin, spawnCoinRain, updateBossRoom,
+  /* ---- 音频（自动化测试入口：可驱动排音并检查实际落到 AudioParam 的数值） ---- */
+  bgmTick, stinger, noiseHit, kickHit, tone, BGM_TRACKS, DRUM_KITS,
+  get bgmTrack() { return bgmTrack; }, get bgmIdx() { return bgmIdx; },
+  get curMusic() { return cur.music || (cur.theme === 'under' ? 'under' : 'over'); },
+  set audioOn(v) { audioOn = !!v; if (masterGain) masterGain.gain.value = audioOn ? 1 : 0; },
+};
+</script>
+</body>
+</html>
