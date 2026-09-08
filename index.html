@@ -12,14 +12,23 @@
     box-shadow:0 10px 40px rgba(0,0,0,.6);background:#5c94fc;}
   @supports (height:100dvh){ canvas{ width:min(96vw, calc((100dvh - var(--ctlH,0px) - 64px) * 1.7647), 960px);} }
   body.coarse{--ctlH:calc(180px + env(safe-area-inset-bottom, 0px));}
-  @media (orientation: landscape){ body.coarse{--ctlH:0px;} }   /* 横屏：按键移入画面左右侧带，不再占用纵向空间 */
+  body.lay-x{--ctlH:0px;}                    /* 横屏与强制横屏共用：按键落进画面左右侧带，不再占纵向空间 */
+  /* ---- 强制横屏：#stage 旋转 -90°，画面顶 = 设备左边 → 玩家顺时针转手机即可读（与引导图标 ↻ 同向）。
+         不依赖设备愿意转屏或 orientation.lock 是否可用。
+         轴向互换后 vw/vh 与画面局部轴不再对应，故画布 CSS 尺寸由 fitStage() 按 #stage 实际盒子算。
+         安全区同步换轴：画面左=设备底（Home 条边）、画面上=设备左、画面右=设备顶（多数机型刘海边）→ 系统键避开刘海。 */
+  #stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  body.force-rot #stage{position:fixed;left:0;top:100vh;width:100vh;height:100vw;transform:rotate(-90deg);transform-origin:0 0;}
+  @supports (height:100dvh){ body.force-rot #stage{width:100dvh;height:100dvw;} }
+  body.force-rot #touch{position:absolute;}  /* fixed 后代在 transform 容器内以 stage 为包含块，这里显式写平 */
+  body.force-rot #rotate{display:none !important;}   /* 画面已横向铺满，无需拦路提示转屏 */
   .tip{color:#9fb4d0;margin-top:12px;font-size:13px;letter-spacing:1px;user-select:none;text-align:center;}
   .tip .tch{display:none;}
   body.coarse .tip .kbd{display:none;} body.coarse .tip .tch{display:inline;}
   /* 触屏虚拟按键（仅触屏设备显示，热区 ≥44px；底部避开刘海安全区）。
      视觉统一：方向键=箭头符号 / 动作键=单字汉字 / 系统键=符号，三组各自语义一致；深色底 + 白描边保证亮暗画面均可读 */
   #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:9;}
-  .tbtn{position:absolute;pointer-events:auto;width:60px;height:60px;border-radius:14px;background:rgba(8,12,30,.42);border:2px solid rgba(255,255,255,.55);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .06s ease,background .06s ease,border-color .06s ease;box-shadow:0 3px 8px rgba(0,0,0,.4);}
+  .tbtn{position:absolute;box-sizing:border-box;pointer-events:auto;width:60px;height:60px;border-radius:14px;background:rgba(8,12,30,.42);border:2px solid rgba(255,255,255,.55);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .06s ease,background .06s ease,border-color .06s ease;box-shadow:0 3px 8px rgba(0,0,0,.4);}
   /* 按压态：缩放 + 加深 + 白描边（.on 由 JS 置位，滑移换键时视觉同步；无震动的设备靠它补手感） */
   .tbtn:active,.tbtn.on{transform:scale(.92);background:rgba(8,12,30,.62);border-color:#ffffff;box-shadow:inset 0 0 0 2px rgba(0,0,0,.4),0 3px 8px rgba(0,0,0,.4);}
   /* 竖屏：下排 [◀▼▶] 方向区 + [跑][跳] A/B 并排；上排 火 + 系统工具行 */
@@ -31,18 +40,22 @@
   #btnF{right:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));}
   #btnP{left:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
   #btnX{left:58px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
-  @media (orientation: landscape){
-    /* 横屏：画面居中，左右侧带放手柄式按键（左=方向，右=动作），系统键贴画面顶角 */
-    #btnL{left:calc(2px + env(safe-area-inset-left, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));}
-    #btnR{left:calc(2px + env(safe-area-inset-left, 0px));bottom:calc(86px + env(safe-area-inset-bottom, 0px));}
-    #btnD{left:calc(72px + env(safe-area-inset-left, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
-    #btnJ{right:calc(2px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:72px;height:72px;}
-    #btnF{right:calc(84px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
-    #btnB{right:calc(2px + env(safe-area-inset-right, 0px));bottom:calc(94px + env(safe-area-inset-bottom, 0px));width:52px;height:52px;font-size:20px;}
-    #btnP{left:auto;right:calc(2px + env(safe-area-inset-right, 0px));bottom:auto;top:calc(8px + env(safe-area-inset-top, 0px));width:40px;height:40px;font-size:15px;}
-    #btnX{left:auto;right:calc(48px + env(safe-area-inset-right, 0px));bottom:auto;top:calc(8px + env(safe-area-inset-top, 0px));width:40px;height:40px;font-size:15px;}
-  }
-  /* 横屏引导遮罩：仅触屏竖屏时显示（JS 控制 .show），横屏或桌面端始终隐藏 */
+  /* 手柄式横屏按键：左带 = 方向（◀▶ 并排 + ▼ 居中其上）+ 左上肩位「跑」；右带 = 「跳」为主、「火」竖排其上，系统键右上。
+     「跑」放肩位的理由：冲刺跳要同时占住「跑」与「跳」，若两键都在右拇指行程内则结构上无法完成；
+     移交给左手食指后变成两个单手动作（左=跑+方向，右=跳），也不再需要滑移并存。
+     底行不叠加 safe-area-inset-bottom：真横屏下它只是圆角余量，强制横屏下该边已换轴映射到画面左侧。
+     已知取舍：视口极矮时（画布竖向几乎顶满）右上 44px 系统键会擦到画布顶角，与改造前的真横屏行为一致，不为它再砍画布。 */
+  body.lay-x{--saL:env(safe-area-inset-left, 0px);--saR:env(safe-area-inset-right, 0px);--saT:env(safe-area-inset-top, 0px);}
+  body.force-rot{--saL:env(safe-area-inset-bottom, 0px);--saR:env(safe-area-inset-top, 0px);--saT:env(safe-area-inset-left, 0px);}
+  body.lay-x #btnL{left:calc(2px + var(--saL));bottom:10px;width:56px;height:56px;}
+  body.lay-x #btnR{left:calc(68px + var(--saL));bottom:10px;width:56px;height:56px;}          /* 与 ◀ 留 10px 缝 */
+  body.lay-x #btnD{left:calc(44px + var(--saL));bottom:78px;width:48px;height:48px;font-size:19px;}   /* 与方向行留 12px，不再压在 ◀▶ 缝上 */
+  body.lay-x #btnB{left:calc(2px + var(--saL));top:calc(8px + var(--saT));width:62px;height:46px;font-size:19px;}
+  body.lay-x #btnJ{right:calc(2px + var(--saR));bottom:10px;width:78px;height:78px;font-size:26px;}
+  body.lay-x #btnF{right:calc(8px + var(--saR));bottom:96px;width:56px;height:56px;font-size:20px;}   /* 竖排在跳键上方：右带最深只到 80px，把画面宽度还给画布 */
+  body.lay-x #btnP{left:auto;right:calc(2px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:44px;height:44px;font-size:16px;}
+  body.lay-x #btnX{left:auto;right:calc(54px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:44px;height:44px;font-size:16px;}
+  /* 横屏引导遮罩（兜底）：仅当连 CSS 旋转都不可用时才显示；正常触屏竖屏已被 force-rot 直接转成横向，不再拦路 */
   #rotate{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;
     gap:18px;background:rgba(10,10,25,.92);color:#fff;font-family:"Microsoft YaHei",monospace;text-align:center;}
   #rotate.show{display:flex;}
@@ -56,8 +69,9 @@
 </style>
 </head>
 <body>
+<div id="stage">
 <canvas id="game" width="960" height="544"></canvas>
-<div class="tip"><span class="kbd">A / D 移动 ｜ Shift 奔跑 ｜ 空格 / W 跳跃 ｜ S / ↓ 蹲下・入管 ｜ J / X 火球 ｜ M 音效 ｜ P 暂停 ｜ R 重开</span><span class="tch">横屏体验最佳：左手方向 ・ 右手跳/火/跑 ｜ 竖屏亦可玩</span></div>
+<div class="tip"><span class="kbd">A / D 移动 ｜ Shift 奔跑 ｜ 空格 / W 跳跃 ｜ S / ↓ 蹲下・入管 ｜ J / X 火球 ｜ M 音效 ｜ P 暂停 ｜ R 重开</span><span class="tch">画面已强制横屏：左手 ◀▶ ＋ 食指「跑」 ・ 右手 「跳」「火」</span></div>
 <div id="touch">
   <div class="tbtn" id="btnL">◀</div>
   <div class="tbtn" id="btnR">▶</div>
@@ -68,7 +82,8 @@
   <div class="tbtn" id="btnP">Ⅱ</div>
   <div class="tbtn" id="btnX">⛶</div>
 </div>
-<!-- 横屏引导遮罩：触屏竖屏时盖住画面，点按钮尝试全屏+锁定横屏，也可跳过继续竖屏玩 -->
+</div>
+<!-- 横屏引导遮罩：仅当无法自动横向（极少数环境 CSS 旋转也失效）时兜底显示，点按钮尝试全屏+锁定横屏 -->
 <div id="rotate">
   <div class="rphone"><div class="rarrow">↻</div></div>
   <div class="rtxt">请横屏游戏</div>
@@ -97,6 +112,10 @@ const VIEW_W    = 960, VIEW_H = 544;  // 画布逻辑尺寸（30 列 × 17 行�
 const GRAVITY    = 2400;              // 重力加速度
 const JUMP_V     = 784;               // 起跳初速度（向上）：静止最大跳约 4 格（原版 SMB）
 const JUMP_CUT   = 0.45;              // 松开跳键时上升速度截断比例（可变跳跃高度）
+/* 触屏最小持按：到顶要 784/2400≈0.33s，而手指"点"通常只有 60~120ms —— 不保底的话移动端几乎每次都是
+   截断跳（实测 83ms 松手只有 2.1 格）。取 0.15s：点按保底实测 2.7 格（稳过 2 格水管），长按仍可 3.8 格，
+   保留约 1 格的可变高度余量。键盘不启用（长按是主动意图，短跳工具要留着）。 */
+const JUMP_HOLD_MIN = 0.15;
 const MAX_FALL   = 1100;              // 最大下落速度上限
 const MOVE_ACCEL = 2400;              // 地面行走加速度
 const AIR_ACCEL  = 1700;              // 空中操控加速度
@@ -408,7 +427,7 @@ function isSolid(x, y) {
 
 /* ============================== 3. 输入 ============================== */
 /* 按键状态对象：按下/松开均记录；jumpQueued 为预输入缓冲计时 */
-const input = { left: false, right: false, jump: false, down: false, run: false, jumpQueued: 0 };
+const input = { left: false, right: false, jump: false, down: false, run: false, jumpQueued: 0, jumpSrc: 'key' };
 const KEYMAP = {
   ArrowLeft: 'left',  KeyA: 'left',
   ArrowRight: 'right', KeyD: 'right',
@@ -418,6 +437,7 @@ const KEYMAP = {
 };
 addEventListener('keydown', e => {
   ensureAudio();                                   // 首次按键手势内解锁 AudioContext
+  if (gameState === 'title' && isTouchDevice()) return;   // 触屏开局由 pointerdown 负责，别用首指的合成 keydown 抢跳选关
   if (gameState === 'title') {                     // 标题：↑↓/W S 选关（自动跳过未解锁），其余键开始
     if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowDown' || e.code === 'KeyS') {
       const dir = (e.code === 'ArrowUp' || e.code === 'KeyW') ? -1 : 1;
@@ -446,7 +466,7 @@ addEventListener('keydown', e => {
   const k = KEYMAP[e.code];
   if (!k) return;
   e.preventDefault();                              // 防空格/方向键滚动页面
-  if (k === 'jump' && !input.jump && !e.repeat) input.jumpQueued = JUMP_BUFFER;
+  if (k === 'jump' && !input.jump && !e.repeat) { input.jumpQueued = JUMP_BUFFER; input.jumpSrc = 'key'; }
   input[k] = true;
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) input[k] = false; });
@@ -464,23 +484,56 @@ function showTouch(){
 }
 if (matchMedia('(pointer: coarse)').matches) showTouch();
 addEventListener('touchstart', showTouch, { once: true, passive: true });
-addEventListener('resize', () => {                  // 旋转后重算（--ctlH 由媒体查询自动切换，这里只兜底画面尺寸）
-  if (document.body.classList.contains('coarse')) showTouch();
-});
-
-/* ---- 横屏引导（横屏优先）：触屏竖屏时盖遮罩；“横屏开始”=全屏+尝试锁定横屏；可跳过竖屏玩 ---- */
-const rotateEl = document.getElementById('rotate');
-let rotateDismissed = false;                         // 用户跳过一次后本次会话不再打扰
+/* ---- 布局模式：触屏一律横向（强制横屏），两级实现 ----
+ * ① 真横屏（设备自己转，或全屏后 orientation.lock 成功）→ body.lay-x：按键走画面侧带、不占纵向；
+ * ② 物理仍竖屏（iOS 未全屏时 lock 必 reject、系统锁了旋转、键盘支架…）→ body.force-rot：CSS 把 #stage 旋转 90°，
+ *    画面照样横向铺满，玩家不需要任何操作。
+ * 为什么要强制：960×544 的画面在竖屏里只能按宽度受限缩到约 0.42 倍面积，是"移动端看不清/键挤成一团"的第一成因；
+ * 横向后同一台手机的画布面积约 2.4×。 */
+const stageEl = document.getElementById('stage');
 function isTouchDevice(){ return matchMedia('(pointer: coarse)').matches; }
 function isPortrait(){ return matchMedia('(orientation: portrait)').matches; }
-function syncRotate(){
-  const want = isTouchDevice() && isPortrait() && !rotateDismissed;
-  rotateEl.classList.toggle('show', want);
-  if (want && gameState === 'play') togglePause();   // 中途转竖屏：先暂停再挡画面
+function canCssRotate(){                          // 旋转兜底是否可用（老 WebView 判 false 时退回遮罩）
+  try { return (typeof CSS === 'undefined') || !CSS.supports ? true : CSS.supports('transform', 'rotate(90deg)'); }
+  catch (_) { return true; }
 }
-requestAnimationFrame(syncRotate);                   // 延后一帧：等 gameState 等 let 声明完成，避免 TDZ 报错
-addEventListener('resize', syncRotate);
-addEventListener('orientationchange', syncRotate);
+function fitStage(force){
+  if (force === undefined) force = document.body.classList.contains('force-rot');
+  if (!force) { cvs.style.width = cvs.style.height = ''; return; }   // 真横屏/桌面：交回原 CSS 双向约束公式
+  /* 轴向互换后 100vw/100vh 与画面局部轴不再对应，改按 #stage 实际盒子算 */
+  const boxW = stageEl.clientWidth || cvs.width, boxH = stageEl.clientHeight || cvs.height;
+  const tipEl = document.querySelector('.tip');
+  const tipH = (tipEl && tipEl.offsetHeight) || 0;
+  const availH = Math.max(120, boxH - tipH - 24);                   // 24 = 画框上下边框 + 提示行间距
+  const band = Math.min(132, boxW * 0.2);     /* 两侧各留按键带深度：左带最深 124（▶ 68+56），右带 80（跳 2+78）
+                                                  取 132 留一点余量；再大会白丢画布面积（竖向本就吃紧） */
+  const w = Math.min(boxW - band * 2, availH * (cvs.width / cvs.height), cvs.width);
+  cvs.style.width = w.toFixed(1) + 'px';
+  cvs.style.height = (w * cvs.height / cvs.width).toFixed(1) + 'px';
+}
+function applyLayoutMode(){
+  const touch = isTouchDevice();
+  const force = touch && isPortrait() && canCssRotate();
+  document.body.classList.toggle('coarse', touch);
+  document.body.classList.toggle('lay-x', touch);                   // 触屏时画面必为横向（真/强制）→ 侧带布局
+  document.body.classList.toggle('force-rot', force);
+  if (touch) showTouch();
+  fitStage(force);
+  syncRotate();
+}
+addEventListener('resize', applyLayoutMode);
+addEventListener('orientationchange', applyLayoutMode);
+
+/* ---- 兜底遮罩：只有连 CSS 旋转都不可用的老环境才会真的挡路；其余情况画面已经横向，遮罩自动隐藏 ---- */
+const rotateEl = document.getElementById('rotate');
+let rotateDismissed = false;                         // 用户跳过一次后本次会话不再打扰
+function syncRotate(){
+  const want = isTouchDevice() && isPortrait() && !canCssRotate() && !rotateDismissed;
+  rotateEl.classList.toggle('show', want);
+  if (want && gameState === 'play') togglePause();   // 中途转竖屏且无法自动横屏：先暂停再挡画面
+}
+/* 首帧布局不能等 rAF（无头/省电节流下可能长时间不回调，会停在竖屏控件带里），
+   但此处 gameState 等 let 尚未声明（TDZ），故真正的启动调用放在第 10 节末尾。 */
 document.getElementById('btnSkip').addEventListener('pointerdown', e => {
   e.preventDefault(); rotateDismissed = true; syncRotate();
 });
@@ -494,12 +547,13 @@ document.getElementById('btnGo').addEventListener('pointerdown', async e => {
   try {                                              // 锁定横屏：安卓 WebView/Chrome 有效，iOS 会 reject
     await screen.orientation.lock('landscape');
   } catch (_) {}
-  rotateDismissed = true; syncRotate();
+  rotateDismissed = true;
   showTouch();
+  applyLayoutMode();                                 // 全屏/锁定结果未知，统一重算一次布局
 });
 document.addEventListener('fullscreenchange', () => { // 退出全屏时解除锁定，恢复跟随系统旋转
   if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (_) {} }
-  syncRotate();
+  applyLayoutMode();
 });
 /* ---- 触感反馈：Vibration API（Android 有效；iOS 不实现 → canVibrate=false，自动只留视觉/音效）。
      默认开启不设开关：系统级可关闭振动，游戏内不再占一个键位 ---- */
@@ -513,7 +567,7 @@ const HOLD_KEYS = {
   btnR: { down: () => input.right = true,  up: () => input.right = false, ms: 8,  tap: true  },
   btnD: { down: () => input.down  = true,  up: () => input.down  = false, ms: 8,  tap: true  },
   btnB: { down: () => input.run   = true,  up: () => input.run   = false, ms: 6,  tap: true  },
-  btnJ: { down: () => { input.jump = true; input.jumpQueued = JUMP_BUFFER; },
+  btnJ: { down: () => { input.jumpSrc = 'touch'; input.jump = true; input.jumpQueued = JUMP_BUFFER; },
           up: () => input.jump = false,     ms: 14, tap: false },   // 跳有 jump 音
   btnF: { down: () => shootFireball(),      up: () => {},            ms: 14, tap: false },   // 火有 fire 音
 };
@@ -583,7 +637,7 @@ document.getElementById('btnP').addEventListener('pointerdown', e => {
 /* ========================= 4. 物理与 AABB 碰撞 ========================= */
 const player = { x: 0, y: 0, w: PLAYER_W, h: PLAYER_H, vx: 0, vy: 0,
                  onGround: false, wasGround: false, facing: 1,
-                 cutDone: true, coyote: 0, runT: 0, stuckT: 0,
+                 cutDone: true, coyote: 0, runT: 0, stuckT: 0, jumpGrace: 0,
                  mode: 'small', invulnT: 0, starT: 0,
                  crouch: false, skidSfx: false };             // mode: small | big | fire
 const SPAWN = { x: 2 * TILE, y: GROUND_ROW * TILE - PLAYER_H };
@@ -690,17 +744,19 @@ function updatePlayer(dt) {
 
   /* ---- 水平：加速度 / 反向打滑 / 摩擦 / 走跑双档限速 ----
    * 单一目标限速 cap：加速段与限速段共用同一个 cap，消除"先加速冲过 WALK_MAX 再事后回拉"的两套系统耦合。
-   * wantRun：按住跑键或离地 → 上限 RUN_MAX；地面松跑 → 上限 WALK_MAX。 */
-  const wantRun = input.run || !p.onGround;
+   * 档位只看跑键（空中也一样）：之前"离地即跑档"会让走跳在空中被一路补速到 440，
+   * 冲刺跳相对走跳几乎没有距离收益（实测 9.0 vs 9.9 格），而且越飞越远、落点不可控。
+   * cap 只约束"还能不能再加速"，不没收已有动量 —— 空中松掉跑键不会瞬间掉速，落地摩擦再收。 */
+  const wantRun = input.run;
   const spdMul = (bossRoom.active && bossRoom.buffs.speedBoost) ? BR_SPEED_MUL : 1;   // 房内商品「加速跑」：仅本房有效
   const cap = (wantRun ? RUN_MAX : WALK_MAX) * spdMul;
   const dir = (p.crouch && p.onGround) ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (dir !== 0) {
     const skid = p.onGround && Math.sign(p.vx) === -dir && Math.abs(p.vx) > SKID_V;   // 反向打滑
-    // 同向且已达当前档位上限则不再加速（打滑中除外，打滑要能快速反抽）；cap 也用于硬性夹紧
+    // 同向且已达当前档位上限则不再加速（打滑中除外，打滑要能快速反抽）；只有地面才把超速硬性夹紧
     const atCap = !skid && Math.sign(p.vx) === Math.sign(dir) && Math.abs(p.vx) >= cap;
     if (atCap) {
-      if (Math.abs(p.vx) > cap) p.vx = Math.sign(p.vx) * cap;
+      if (p.onGround && Math.abs(p.vx) > cap) p.vx = Math.sign(p.vx) * cap;
     } else {
       p.vx += dir * (skid ? MOVE_ACCEL * 1.7 : (p.onGround ? MOVE_ACCEL : AIR_ACCEL)) * dt;
       if (!skid && Math.sign(p.vx) === Math.sign(dir)) p.vx = Math.sign(p.vx) * Math.min(Math.abs(p.vx), cap);
@@ -735,6 +791,7 @@ function updatePlayer(dt) {
       p.vy = -(JUMP_V + Math.abs(p.vx) * 0.2);      // 原版：跑得越快跳得越高
       p.onGround = false;
       p.coyote = 0; p.cutDone = false; input.jumpQueued = 0;
+      p.jumpGrace = input.jumpSrc === 'touch' ? JUMP_HOLD_MIN : 0;   // 触屏点按保底（见 JUMP_HOLD_MIN）
       jumpSfx(Math.abs(p.vx));                         // 音高随水平速度：跑得越快跳声越尖
     }
   }
@@ -743,10 +800,14 @@ function updatePlayer(dt) {
       bossRoom.active && bossRoom.buffs.doubleJump && bossRoom.buffs.canDoubleJump) {
     p.vy = -(JUMP_V * 0.85 + Math.abs(p.vx) * 0.2);
     p.onGround = false; p.cutDone = false; input.jumpQueued = 0;
+    p.jumpGrace = input.jumpSrc === 'touch' ? JUMP_HOLD_MIN : 0;
     bossRoom.buffs.canDoubleJump = false;
     jumpSfx(Math.abs(p.vx));
   }
-  if (!p.cutDone && !input.jump && p.vy < 0) {      // 上升中松开跳键 → 截断（短跳）
+  if (p.jumpGrace > 0) p.jumpGrace -= dt;
+  /* 保底时长内即使手指已抬起，也按"仍按住"处理：触屏短点不再被当成主动要短跳。键盘 jumpSrc='key' → 恒不生效 */
+  const jumpHeld = input.jump || p.jumpGrace > 0;
+  if (!p.cutDone && !jumpHeld && p.vy < 0) {         // 上升中松开跳键 → 截断（短跳）
     p.vy *= JUMP_CUT; p.cutDone = true;
   }
 
@@ -1115,7 +1176,9 @@ function playerEnemyHits() {
     // 踩踏判定：只要在“正在下落”(vy>40，比原 100 宽松，轻踩也能触发)且脚落在敌人上 60% 高度内
     const stomp = player.vy > 40 && (player.y + player.h) - e.y < e.h * 0.6;
     if (stomp) {
-      player.vy = input.jump ? -STOMP_BOUNCE_HELD : -STOMP_BOUNCE;
+      /* 反弹力度看"要不要继续连锁"：按住跳 / 撞击瞬间补点一下（预输入仍在缓冲）/ 触屏保底期内，均算主动持按。
+         只看 input.jump 的话，触屏一次点按 60~120ms 早已抬起，链式踩怪永远只能拿到 460 弱弹。 */
+      player.vy = (input.jump || input.jumpQueued > 0 || player.jumpGrace > 0) ? -STOMP_BOUNCE_HELD : -STOMP_BOUNCE;
       player.y = e.y - player.h;
       buzz(16);                                        // 踩中实感（触屏事件反馈）
       if (e.kind === 'goomba') {
@@ -3755,6 +3818,8 @@ function frame(now) {
   bgmTick();                                           // BGM 排音（用户手势解锁 AudioContext 后自动起播）
 }
 respawn();
+applyLayoutMode();                                   // 同步定档：触屏首帧即为横屏（真横屏或 CSS 旋转），不等 rAF
+addEventListener('visibilitychange', () => { if (!document.hidden) applyLayoutMode(); });   // 手机地址栏收起/回前台常只改尺寸不发 resize
 requestAnimationFrame(frame);
 
 /* ======================== 11. 调试 / 自动化钩子 ======================== */
@@ -3793,6 +3858,8 @@ window.__ENGINE = {
   get bgmTrack() { return bgmTrack; }, get bgmIdx() { return bgmIdx; },
   get curMusic() { return cur.music || (cur.theme === 'under' ? 'under' : 'over'); },
   set audioOn(v) { audioOn = !!v; if (masterGain) masterGain.gain.value = audioOn ? 1 : 0; },
+  /* ---- 布局（自动化入口：改视口后同步重算，再读 body.class 判定姿态分支） ---- */
+  applyLayoutMode, fitStage,
 };
 </script>
 </body>
