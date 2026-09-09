@@ -66,6 +66,59 @@
   .rtxt{font-size:22px;letter-spacing:4px;}
   #rotate button{padding:14px 40px;font-size:18px;border-radius:10px;border:2px solid #ffd23f;background:rgba(255,210,63,.15);color:#ffd23f;font-family:inherit;}
   #rotate button.rskip{border-color:#5a6a85;background:transparent;color:#9fb4d0;font-size:15px;padding:10px 28px;}
+/* ===================== 玩法说明模态窗 ===================== */
+#manualBtn{position:fixed;right:14px;top:14px;z-index:8;width:46px;height:46px;border-radius:12px;
+  background:rgba(8,12,30,.55);border:2px solid #ffd23f;color:#ffd23f;font-size:22px;font-weight:bold;
+  font-family:inherit;display:none;align-items:center;justify-content:center;cursor:pointer;
+  user-select:none;-webkit-user-select:none;box-shadow:0 3px 8px rgba(0,0,0,.4);line-height:1;
+  -webkit-tap-highlight-color:transparent;transition:transform .06s ease;}
+#manualBtn:active{transform:scale(.92);}
+body.force-rot #manualBtn{right:auto;left:calc(2px + env(safe-area-inset-bottom,0px));top:calc(8px + env(safe-area-inset-left,0px));}
+#manual-overlay{position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;
+  background:rgba(6,6,20,.78);}
+#manual{position:relative;width:min(820px,94vw);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;
+  background:#1c1c3a;border:4px solid #000;box-shadow:inset 0 0 0 2px #3a3a5e,0 12px 40px rgba(0,0,0,.6);
+  border-radius:6px;color:#f5f6fa;font-family:"SimSun","NSimSun","Microsoft YaHei",monospace;}
+#manual-close{position:absolute;right:10px;top:8px;width:34px;height:34px;border-radius:8px;
+  background:rgba(255,90,90,.15);border:2px solid #ff5a5a;color:#ff5a5a;font-size:20px;cursor:pointer;
+  font-family:inherit;z-index:2;line-height:1;}
+#manual-body{padding:22px 26px 10px;overflow-y:auto;flex:1;letter-spacing:1px;line-height:1.8;font-size:14px;
+  -webkit-overflow-scrolling:touch;}
+#manual-body::-webkit-scrollbar{width:10px;}
+#manual-body::-webkit-scrollbar-thumb{background:#3a3a5e;border-radius:5px;}
+#manual-body h2{font-size:18px;color:#fff;letter-spacing:3px;margin:0 0 14px;padding-bottom:8px;
+  border-bottom:3px dashed #3a3a5e;}
+#manual-body h2 .tag{display:inline-block;background:#ffd23f;color:#000;padding:0 8px;margin-right:10px;
+  box-shadow:2px 2px 0 #000;font-size:14px;}
+#manual-body h2 .c{color:#ffd23f;}
+#manual-body .boss{border:2px solid #8a2b2b;box-shadow:inset 0 0 0 2px #5a1a1a;background:#241828;
+  padding:14px 16px;margin:10px 0;border-radius:6px;}
+#manual-body .boss h2 .tag{background:#ff5a5a;color:#fff;}
+#manual-body p{margin-bottom:8px;}
+#manual-body .dim{color:#9fb4d0;}
+#manual-body .hl{color:#ffd23f;}
+#manual-body .rd{color:#ff5a5a;font-weight:bold;}
+#manual-body .gn{color:#7ae048;font-weight:bold;}
+#manual-body .cn{color:#5ad0ff;font-weight:bold;}
+#manual-body table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0;}
+#manual-body th,#manual-body td{border:2px solid #000;padding:6px 8px;text-align:left;vertical-align:top;}
+#manual-body th{background:#c87137;color:#fff;letter-spacing:1px;}
+#manual-body tr:nth-child(even) td{background:#23234a;}
+#manual-body tr:nth-child(odd) td{background:#1a1a38;}
+#manual-body td.k{color:#ffd23f;white-space:nowrap;font-weight:bold;}
+#manual-body kbd{display:inline-block;background:#000;color:#fff;border:2px solid #fff;
+  box-shadow:2px 2px 0 #5a5a8a;padding:0 6px;margin:0 2px;font-size:12px;font-family:inherit;white-space:nowrap;}
+#manual-body ul{list-style:none;padding-left:2px;}
+#manual-body ul li{padding-left:20px;position:relative;margin-bottom:6px;}
+#manual-body ul li::before{content:"◆";position:absolute;left:0;color:#ffd23f;font-size:11px;top:5px;}
+#manual-body .lv{display:inline-block;background:#5c94fc;color:#000;font-weight:bold;padding:0 8px;
+  box-shadow:2px 2px 0 #000;margin-right:8px;}
+#manual-nav{display:flex;align-items:center;justify-content:space-between;padding:10px 22px 16px;
+  border-top:2px solid #3a3a5e;background:#161630;}
+#manual-nav button{background:rgba(8,12,30,.5);border:2px solid #9fb4d0;color:#fff;padding:8px 16px;
+  border-radius:8px;font-family:inherit;font-size:14px;cursor:pointer;letter-spacing:1px;}
+#manual-nav button:active{transform:scale(.94);}
+#manual-pager{color:#ffd23f;font-size:14px;letter-spacing:2px;font-weight:bold;}
 </style>
 </head>
 <body>
@@ -82,6 +135,18 @@
   <div class="tbtn" id="btnP">Ⅱ</div>
   <div class="tbtn" id="btnX">⛶</div>
 </div>
+</div>
+<button id="manualBtn" title="玩法说明 (H)">?</button>
+<div id="manual-overlay">
+  <div id="manual">
+    <button id="manual-close">×</button>
+    <div id="manual-body"></div>
+    <div id="manual-nav">
+      <button id="manual-prev">◀ 上一页</button>
+      <span id="manual-pager">1 / 8</span>
+      <button id="manual-next">下一页 ▶</button>
+    </div>
+  </div>
 </div>
 <!-- 横屏引导遮罩：仅当无法自动横向（极少数环境 CSS 旋转也失效）时兜底显示，点按钮尝试全屏+锁定横屏 -->
 <div id="rotate">
@@ -173,9 +238,11 @@ const MULTI_COINS = 10;                     // 十金币砖顶出次数
 /* ============================ 2. 瓦片地图系统 ============================ */
 /* 瓦片 ID：
  *   0 空地   1 地面砖   2 砖块   3 问号砖   4 金币(非实心)   5 管道   6 已用问号砖   7 隐藏砖(不可见，顶出才显形)
- *   8 商店砖(Boss 房内，实心可顶，顶起=购买) */
-const T_EMPTY = 0, T_GROUND = 1, T_BRICK = 2, T_QBLOCK = 3, T_COIN = 4, T_PIPE = 5, T_QUSED = 6, T_HIDDEN = 7, T_SHOP = 8;
-const SOLID_TILES = new Set([T_GROUND, T_BRICK, T_QBLOCK, T_PIPE, T_QUSED, T_SHOP]);   // 金币/隐藏砖非实心
+ *   8 商店砖(Boss 房内，实心可顶，顶起=购买)
+ *   9 机关砖(挑战房，顶亮)  10 金库闸门(挑战房，实心墙)  11 橙红砖(挑战房墙面，等同砖块) */
+const T_EMPTY = 0, T_GROUND = 1, T_BRICK = 2, T_QBLOCK = 3, T_COIN = 4, T_PIPE = 5, T_QUSED = 6, T_HIDDEN = 7, T_SHOP = 8,
+      T_SWITCH = 9, T_GATE = 10, T_CBRICK = 11;
+const SOLID_TILES = new Set([T_GROUND, T_BRICK, T_QBLOCK, T_PIPE, T_QUSED, T_SHOP, T_SWITCH, T_GATE, T_CBRICK]);   // 金币/隐藏砖非实心
 
 let MAP_W = 224; const MAP_H = 17; // 17 行 × 32px = 544，正好一屏高，摄像机只需横向跟随
 const GROUND_ROW = 15;              // 地表表层行（其下 16 行同为地面砖）
@@ -225,7 +292,7 @@ const LEVELS = [
       { kind:'goomba', col:128 },{ kind:'goomba', col:129 },{ kind:'goomba', col:174 },{ kind:'goomba', col:176 },
     ],
     unders: [ { w: 30, exitCol: 163 },                          // col57 入管 → 原版金币房 → 从 col163 出口管回到地上
-               { w: 40, exitCol: 179, type: 'boss' } ],        // col46 入管 → 资源管理 Boss 房 → 从 col179 出口管回到地上
+               { w: 40, exitCol: 179, type: 'challenge' } ],   // col46 入管 → 机关挑战房 → 从 col179 出口管回到地上
   },
   { name: 'World 1-2', w: 176, goal: 166, time: 400,
     // 地下关（机制对齐原版）：全蓝主题 + 天花板砖层；吊管食人花、递增爬管段、
@@ -328,6 +395,20 @@ const LEVELS = [
     ],
     unders: [],
   },
+  { name: 'World 1-4', w: 40, goal: 60, time: 300,
+    // 城堡前奏走廊 → 尽头水管(col36)进 Boss 房；打赢 Boss 直接通关（goal 设界外=不触发旗杆）
+    pits: [],
+    pipes: [ {col:36,h:2,enter:0} ],
+    bricks: [ [8,11],[9,11],[10,11],[18,11],[19,11],[20,11],[24,7],[25,7],[26,7],[30,11],[31,11] ],
+    qblocks: [ [12,11] ],
+    coins: [ [14,10],[15,10],[16,10],[24,6],[25,6],[26,6] ],
+    stairs: [],
+    hidden: [],
+    qContents: { '12,11': 'power' },
+    brickContents: {},
+    enemies: [],
+    unders: [ { w: 40, exitCol: 32, type: 'boss' } ],
+  },
 ];
 
 /* 运行时当前关卡指针 + 由 cur 展开的可变状态（spawns 每关载入时重建，done 标记复位） */
@@ -340,8 +421,8 @@ function loadLevel(idx) {
   levelIdx = idx; cur = LEVELS[idx];
   LEVEL_NAME = cur.name; MAP_W = cur.w; GOAL_COL = cur.goal; CASTLE_COL = cur.goal + 5; TIME_LIMIT = cur.time;
   overMap = buildMap();
-  /* 奖励房按 unders 索引生成：type:'boss' → 资源管理 Boss 房（自带商店砖/竞技场），其余 → 原版金币房 */
-  underMaps = (cur.unders || []).map(u => u.type === 'boss' ? buildBossRoomMap() : buildUnderMap(u.w));
+  /* 奖励房按 unders 索引生成：type:'boss' → 资源管理 Boss 房 / 'challenge' → 机关挑战房，其余 → 原版金币房 */
+  underMaps = (cur.unders || []).map(u => u.type === 'boss' ? buildBossRoomMap() : (u.type === 'challenge' ? buildChallengeMap() : buildUnderMap(u.w)));
   spawns = cur.enemies.map(s => ({ kind: s.kind, x: s.col * TILE, col: s.col, row: s.row || GROUND_ROW, red: !!s.red, done: false }));
   lifts = (cur.lifts || []).map(L => ({ x0: L.col * TILE, y: L.row * TILE, range: (L.range || 4) * TILE,
     speed: L.speed || 60, w: 96, h: 16, x: L.col * TILE, dir: 1, dx: 0 }));
@@ -382,6 +463,82 @@ function buildUnderMap(W) {
   for (let x = c0 + 2; x <= c1 - 2; x++) if ((x - c0) % 4 !== 3) m[13][x] = T_COIN;   // 上层堆叠
   m[12][c0 + 3] = T_COIN; m[12][c1 - 3] = T_COIN;
   return m;
+}
+
+/* ---- 机关解锁挑战房：机关 7s 熄灭、三座须同时亮才开闸（路线谜题）；速通加分 + 1UP 专属奖励，出房即重置 ---- */
+const CR_W = 40, CR_TIME = 30, CR_GATE_COL = 26;   // 列宽 / 倒计时(秒) / 闸门列
+const CR_SWITCH_LIT_T = 7;                          // 机关点亮后保持秒数：超时熄灭 → 逼出路线顺序（谜题核心，非时间惩罚）
+const CR_SPEED_BONUS_T = 20, CR_SPEED_BONUS = 2000; // 开门时剩余 ≥20s → 速通加分（自我挑战，想再刷）
+const CR_SWITCHES = [[6,12],[15,8],[22,10]];        // 三座机关砖 [列,行]：入门低处 / 平台高处 / 远端
+const CR_GOOMBAS = [ {x: 11, vx: -GOOMBA_SPEED}, {x: 19, vx: GOOMBA_SPEED} ];   // 巡逻板栗仔：可踩当踏板弹上高机关
+const challengeRoom = { active:false, time:0, switches:{}, gateOpen:false, failed:false, msg:'', msgT:0 };
+function buildChallengeMap() {
+  const W = CR_W, R = W - 1;
+  const m = Array.from({ length: MAP_H }, () => new Array(W).fill(T_EMPTY));
+  for (let x = 0; x < W; x++) { m[0][x]=T_CBRICK; m[1][x]=T_CBRICK; m[15][x]=T_CBRICK; m[16][x]=T_CBRICK; }   // 橙红天/地
+  for (let y = 0; y < 15; y++) { m[y][0]=T_CBRICK; m[y][R]=T_CBRICK; }                                        // 橙红左右墙
+  for (const [c, r] of CR_SWITCHES) m[r][c] = T_SWITCH;                                                        // 三座机关砖
+  m[11][14]=T_CBRICK; m[11][15]=T_CBRICK; m[11][16]=T_CBRICK;                                                  // 二号机关下方平台
+  for (let y = 7; y <= 14; y++) m[y][CR_GATE_COL] = T_GATE;                                                    // 金库闸门：8 格竖墙（最低到地面行，防跳过）
+  for (let x = 28; x <= 34; x++) { m[14][x]=T_COIN; if (x%2===0) m[13][x]=T_COIN; if (x%3===0) m[12][x]=T_COIN; }  // 金库金币阵（避开右侧出口横管 col36+）
+  m[14][3]=T_COIN; m[14][4]=T_COIN; m[14][20]=T_COIN; m[14][21]=T_COIN;                                        // 入口散币（安慰）
+  return m;
+}
+function enterChallenge() {
+  const C = challengeRoom;
+  C.active = true; C.time = CR_TIME; C.switches = {}; C.gateOpen = false; C.failed = false;
+  C.msg = '挑战房：机关亮 ' + CR_SWITCH_LIT_T + ' 秒会熄灭，让 3 座同时亮开金库！'; C.msgT = 3.5;
+  for (const g of CR_GOOMBAS) enemies.push({                       // 巡逻板栗仔：走位压力 + 可踩连击/踏板
+    kind: 'goomba', x: g.x * TILE, y: GROUND_ROW * TILE - 24, w: 24, h: 24,
+    vx: g.vx, vy: 0, onGround: false, squashT: 0, dead: false, runT: 0,
+  });
+  sfx('sprout');
+}
+function closeChallenge() {
+  const C = challengeRoom;
+  C.active = false; C.time = 0; C.switches = {}; C.gateOpen = false; C.failed = false; C.msgT = 0;
+  enemies.length = 0;                                              // 清场：房内板栗仔不带回地上
+}
+/** 某机关当前是否仍亮着（点亮时刻距今 < CR_SWITCH_LIT_T 秒） */
+function crIsLit(key) {
+  const C = challengeRoom, at = C.switches[key];
+  return at !== undefined && (CR_TIME - C.time) - at < CR_SWITCH_LIT_T;
+}
+/** 当前仍亮着的机关数（渲染与 HUD 共用） */
+function crLitCount() {
+  let n = 0;
+  for (const k in challengeRoom.switches) if (crIsLit(k)) n++;
+  return n;
+}
+function hitSwitch(tx, row) {
+  const C = challengeRoom, key = tx + ',' + row;
+  if (C.active && !C.gateOpen && !C.failed && C.time > 0) {
+    C.switches[key] = CR_TIME - C.time;              // 记录点亮时刻（重复顶 = 刷新续亮）
+    bumpTile(tx, row); sfx('grow');
+    if (crLitCount() >= CR_SWITCHES.length) openGate();   // 三座同时亮 → 开闸
+    else { C.msg = '同时亮 ' + crLitCount() + ' / 3'; C.msgT = 1; }
+  } else { bumpTile(tx, row); sfx('bump'); }
+}
+function openGate() {
+  const C = challengeRoom;
+  C.gateOpen = true;
+  for (let y = 0; y < MAP_H; y++) if (map[y][CR_GATE_COL] === T_GATE) map[y][CR_GATE_COL] = T_EMPTY;   // 闸门整列拆掉
+  if (C.time >= CR_SPEED_BONUS_T) {                  // 速通奖励：开门时剩余 ≥20s
+    score += CR_SPEED_BONUS;
+    fxPush({ type: 'text', x: CR_GATE_COL * TILE, y: 10 * TILE, vy: -70, t: 0, life: 1.4,
+             txt: 'PERFECT +' + CR_SPEED_BONUS, col: '#ffd23f' });
+    C.msg = '金库开启！速通 +' + CR_SPEED_BONUS;
+  } else C.msg = '金库开启！快抢金币！';
+  C.msgT = 2.5;
+  spawnFromBlock('1up', CR_GATE_COL + 4, 13);        // 专属奖励：金库深处 1UP 绿蘑菇
+  sfx('star');
+}
+function updateChallenge(dt) {
+  const C = challengeRoom;
+  if (C.msgT > 0) C.msgT = Math.max(0, C.msgT - dt);
+  if (!C.active || C.gateOpen) return;
+  C.time -= dt;
+  if (C.time <= 0) { C.time = 0; C.failed = true; C.switches = {}; C.msg = '时间到！金库反锁（出房后重来）'; C.msgT = 2.5; sfx('bump'); }
 }
 
 /* ---- 资源管理 Boss 房：布局常量（放在本节 = 顶层 loadLevel() 调用前必须完成求值，避免 TDZ） ---- */
@@ -437,6 +594,13 @@ const KEYMAP = {
 };
 addEventListener('keydown', e => {
   ensureAudio();                                   // 首次按键手势内解锁 AudioContext
+  if (e.code === 'KeyH') { e.preventDefault(); manualOpen ? closeManual() : openManual(); return; }
+  if (manualOpen) {                                // 说明打开时：只接翻页/关闭，屏蔽一切游戏键
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); manualGo(-1); }
+    else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); manualGo(1); }
+    else if (e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); closeManual(); }
+    return;
+  }
   if (gameState === 'title' && isTouchDevice()) return;   // 触屏开局由 pointerdown 负责，别用首指的合成 keydown 抢跳选关
   if (gameState === 'title') {                     // 标题：↑↓/W S 选关（自动跳过未解锁），其余键开始
     if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowDown' || e.code === 'KeyS') {
@@ -955,7 +1119,9 @@ function headBump(row, L, R) {
       const hc = cur.hidden.find(h => h[0] === tx && h[1] === row);
       if (hc && hc[2] === '1up') spawnFromBlock('1up', tx, row);   // 1UP：弹出绿蘑菇
       else gainCoin(tx * TILE + 8, row * TILE - 26, false);        // 金币：直接 +200 入账（无飞行金币）
-    } else if (t === T_BRICK) {                      // 砖块
+    } else if (t === T_SWITCH) {                     // 机关砖（挑战房）：顶亮
+      hitSwitch(tx, row);
+    } else if (t === T_BRICK || t === T_CBRICK) {    // 砖块 / 橙红砖（挑战房墙面）：等同处理
       const key = tx + ',' + row;
       if (cur.brickContents[key] === 'star' && !starBricks.has(key)) {
         // 星星砖：顶出无敌星，砖保持砖块外观且不碎（原版出物砖行为，大小形态一致）；出货后还原为普通砖
@@ -1396,6 +1562,7 @@ function updateDying(dt) {
   player.y += player.vy * dt;
   if (deathT > 1.7) {
     if (bossRoom.active) bossRoomFail();                  // Boss 房内死亡：先按房内规则结算（花费不退、余额折半），再走原有重生/GameOver
+    if (challengeRoom.active) closeChallenge();           // 挑战房内死亡：视同失败出房（清状态与板栗仔），走原有重生流程
     if (deathByPit) { saveHi(); gameState = 'gameover'; return; }   // 摔坑：直接 Game Over（用户规则）
     lives--;
     if (lives > 0 && gameTime < TIME_LIMIT) { respawnToCheckpoint(); gameState = 'play'; }
@@ -1535,9 +1702,9 @@ function updatePipeIn(dt) {
 }
 function enterBonusRoom() {
   const room = cur.unders[roomIdx];
-  /* Boss 房每次进入都重建地图：房内会吃掉金币瓦片、把商店砖顶成已用砖，
-   * 重进必须拿到干净的预算与货架（否则“反复进出”直接失去可买资源） */
+  /* boss/challenge 房每次进入都重建地图：房内会拆闸门/吃掉金币/顶砖，重进须拿干净地图 */
   if (room.type === 'boss') underMaps[roomIdx] = buildBossRoomMap();
+  else if (room.type === 'challenge') underMaps[roomIdx] = buildChallengeMap();
   world = 'under'; map = underMaps[roomIdx]; MAP_W = room.w; camX = 0;
   enemies.length = 0; items.length = 0; fireballs.length = 0;
   player.x = 2 * TILE; player.y = GROUND_ROW * TILE - player.h;
@@ -1545,6 +1712,7 @@ function enterBonusRoom() {
   player.invulnT = Math.max(player.invulnT, 1.0);
   morphT = 0;
   if (room.type === 'boss') enterBossRoom();           // 资源管理 Boss 房：强变小 + 发房内资金 + 生成 Boss
+  else if (room.type === 'challenge') enterChallenge(); // 机关挑战房：开 30s 倒计时 + 三机关待点亮
   gameState = 'play';
 }
 /** 地下右侧横管出口：走到管口右行 → 滑入横管 → 回本房 exitCol 的出口管（出口管须为 h2） */
@@ -1564,7 +1732,15 @@ function updatePipeOut(dt) {
   if (seqT > 0.7 || player.x > (cur.unders[roomIdx].w - 3) * TILE) exitBonusRoom();
 }
 function exitBonusRoom() {
-  if (bossRoom.active) closeBossRoom(true);              // Boss 房：出房即清除房内能力并恢复原形态
+  if (bossRoom.active) {
+    const cleared = bossRoom.state === 'clear';        // 在 closeBossRoom 前取样（close 会清 state）
+    closeBossRoom(true);                                // Boss 房：出房即清除房内能力并恢复原形态
+    if (cleared && levelIdx === LEVELS.length - 1) {    // 最后一关(1-4)打赢 Boss：直接通关，不再回走廊
+      completeLevel();
+      return;
+    }
+  }
+  if (challengeRoom.active) closeChallenge();            // 挑战房：出房即清空开关/倒计时（下次重进重来）
   world = 'over'; map = overMap; MAP_W = cur.w;
   const ec = cur.unders[roomIdx].exitCol;
   player.x = (ec + 1) * TILE - player.w / 2;          // 出口管口中央
@@ -1995,6 +2171,29 @@ function drawRoomEntryPipe() {
   rect(ctx, x + w - 3, y, 3, h, '#000000');
   rect(ctx, x + w - 12, y, 12, 3, '#000000'); rect(ctx, x + w - 12, y + h - 3, 12, 3, '#000000');
 }
+/** 挑战房 HUD：倒计时 + 实时"同时亮"数 + 最快熄灭倒计时（谜题关键反馈）+ 房内提示 */
+function drawChallengeHUD() {
+  const C = challengeRoom;
+  if (!C.active) return;
+  ctx.textAlign = 'center';
+  const sec = Math.max(0, Math.ceil(C.time));
+  const danger = !C.gateOpen && sec <= 5 && Math.floor(coinT * 4) % 2 === 0;
+  shadowText('挑战 ' + sec + 's', VIEW_W / 2, 44, 20, C.gateOpen ? '#7ae048' : (danger ? '#ff5a5a' : '#ffd23f'));
+  const on = crLitCount();
+  shadowText('同时亮 ' + on + ' / 3' + (C.gateOpen ? ' · 金库已开' : (C.failed ? ' · 已超时' : '')), VIEW_W / 2, 64, 14, C.gateOpen ? '#7ae048' : '#cfe3ff');
+  /* 熄灭倒计时：取当前亮着机关里最快熄灭的那个，逼玩家判断"还来不来得及点下一座" */
+  if (!C.gateOpen && on > 0) {
+    const now = CR_TIME - C.time;
+    let minLeft = Infinity;
+    for (const k in C.switches) minLeft = Math.min(minLeft, CR_SWITCH_LIT_T - (now - C.switches[k]));
+    const w = 120, bx = VIEW_W / 2 - w / 2;
+    rect(ctx, bx, 70, w, 6, 'rgba(10,10,26,.55)');
+    rect(ctx, bx, 70, Math.max(0, w * minLeft / CR_SWITCH_LIT_T), 6, minLeft < 2.5 ? '#ff5a5a' : '#7ae048');
+    shadowText('熄灭 ' + minLeft.toFixed(1) + 's', VIEW_W / 2, 92, 12, minLeft < 2.5 ? '#ff5a5a' : '#9ff0a8');
+  }
+  if (C.msgT > 0) shadowText(C.msg, VIEW_W / 2, 112, 14, '#ffffff');
+  ctx.textAlign = 'left';
+}
 /** 房内 HUD：房内金币（与全局金币分列两个口径）、能力图标、商店价格、Boss 血条、提示文字 */
 function drawBossRoomHUD() {
   const B = bossRoom;
@@ -2075,6 +2274,20 @@ function togglePause() {
   else if (gameState === 'pause') gameState = 'play';
 }
 
+/* ---- 倒计时紧迫梯度：剩余越少心跳越急（lub-dub 双跳），让"时间"成为可感知的压力 ---- */
+let heartT = 0;
+function updateTimePressure(dt) {
+  const left = TIME_LIMIT - gameTime;
+  if (!audioOn || !actx || bossRoom.active || left <= 0 || left > 60) { heartT = 0; return; }
+  const interval = left <= 5 ? 0.22 : left <= 10 ? 0.34 : left <= 30 ? 0.55 : 1.0;   // 四档：60/30/10/5 秒逐级加速
+  heartT += dt;
+  if (heartT >= interval) {
+    heartT -= interval;
+    kickHit(0.05, 0);                                // 低频主跳
+    tone(58, 46, 0.07, 'sine', 0.028, 0.05);         // 次级回跳（lub-dub）
+  }
+}
+
 function update(dt) {
   coinT += dt;
   if (bossRoom.msgT > 0) bossRoom.msgT = Math.max(0, bossRoom.msgT - dt);   // 房内提示：出房后仍要自行倒计时消失
@@ -2087,6 +2300,7 @@ function update(dt) {
   }
   if (gameState === 'play') {
     gameTime += dt;
+    updateTimePressure(dt);                          // 倒计时紧迫梯度（心跳渐急；视觉分档见 drawHUD）
     if (morphT > 0) {                                 // 变身定格：全场暂停，仅角色新旧形态闪烁
       morphT -= dt;
     } else {
@@ -2104,6 +2318,7 @@ function update(dt) {
       if (world === 'over') { updatePlants(dt); plantHits(); }
       updateFireballs(dt);
       if (bossRoom.active) updateBossRoom(dt);         // 资源管理 Boss 房：房内状态机 / Boss 战 / 掉落金币
+      if (challengeRoom.active) updateChallenge(dt);   // 机关挑战房：倒计时递减 / 超时反锁金库
       tryEnterPipe();
       checkExitPipeTrigger();
       checkFlag();
@@ -2153,6 +2368,7 @@ function ensureAudio() {
       masterGain.gain.value = audioOn ? 1 : 0;
       masterGain.connect(actx.destination);
       makeNoise();                                    // 白噪缓冲随上下文一次性生成（鼓组共用）
+      initAudioFx();                                 // 脉冲占空比波形 + 回声总线（上下文重建时同步重建）
     } catch (e) { actx = null; }
   }
   if (actx && actx.state === 'suspended') actx.resume();
@@ -2168,6 +2384,42 @@ function tone(f0, f1, dur, type, vol, when) {
   g.gain.setValueAtTime(vol, t0);
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
   o.connect(g); g.connect(masterGain);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+/* ---- NES 脉冲波（占空比）+ APU 回声总线：让干巴巴的方波有"FC 肉感" ---- */
+const PULSE_WAVE = { w12: null, w25: null };      // 12.5% / 25% 占空比波形（50% 即原生 square，无需生成）
+let echoSend = null;                               // 回声总线输入端（干信号由此送入产生尾音）
+function initAudioFx() {
+  if (!actx || PULSE_WAVE.w12) return;            // 波形终身复用（占空比不随上下文重建而变）
+  function pw(duty) {                              // duty=高电平占比；cos 级数近似，相位中心对齐，音色等同
+    const N = 40, real = new Float32Array(N), imag = new Float32Array(N);
+    real[0] = duty;
+    for (let n = 1; n < N; n++) real[n] = Math.sin(2 * Math.PI * n * duty) / (Math.PI * n);
+    return actx.createPeriodicWave(real, imag);
+  }
+  PULSE_WAVE.w12 = pw(0.125);
+  PULSE_WAVE.w25 = pw(0.25);
+  /* 回声：delay 0.09s → 低通 2400 衰减高频 → 反馈 0.3 成尾音，湿信号直出主总线 */
+  echoSend = actx.createGain();
+  const delay = actx.createDelay(0.5); delay.delayTime.value = 0.09;
+  const fb = actx.createGain(); fb.gain.value = 0.3;
+  const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+  echoSend.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay);   // 反馈回路
+  delay.connect(masterGain);                       // 湿信号直出（音量由 echoSend 输入量控制）
+}
+/** 占空比脉冲音：duty='12'|'25'（其余回退方形波）；echo=true 时干信号同时送入回声总线 */
+function pulse(f0, f1, dur, duty, vol, when, echo) {
+  if (!masterGain) return;
+  const t0 = actx.currentTime + (when || 0);
+  const o = actx.createOscillator(), g = actx.createGain();
+  const wv = duty === '12' ? PULSE_WAVE.w12 : (duty === '25' ? PULSE_WAVE.w25 : null);
+  if (wv) o.setPeriodicWave(wv); else o.type = 'square';
+  o.frequency.setValueAtTime(f0, t0);
+  if (f1 !== f0) o.frequency.linearRampToValueAtTime(f1, t0 + dur);
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g); g.connect(masterGain);             // 干信号
+  if (echo && echoSend) o.connect(echoSend);       // 送入回声总线（尾音）
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
 /* ---- 噪声打击乐通道：8-bit 味道的 hi-hat / snare（白噪 + 滤波 + 极短包络） ---- */
@@ -2196,18 +2448,18 @@ function noiseHit(dur, cutoff, vol, when, type) {
 /** 底鼓：正弦快速下扫（无噪声也有的低频冲击） */
 function kickHit(vol, when) { tone(150, 45, 0.09, 'sine', vol, when); }
 const SFX_DEF = {
-  jump:   () => tone(260, 640, 0.16, 'square', 0.13, 0),
-  coin:   () => { tone(988, 988, 0.07, 'square', 0.14, 0); tone(1319, 1319, 0.24, 'square', 0.14, 0.07); },
+  jump:   () => pulse(260, 640, 0.16, '12', 0.13, 0),
+  coin:   () => { pulse(988, 988, 0.07, '12', 0.14, 0, true); pulse(1319, 1319, 0.24, '12', 0.14, 0.07, true); },
   bump:   () => tone(150, 80, 0.09, 'square', 0.18, 0),
   brick:  () => { tone(320, 90, 0.06, 'square', 0.18, 0); tone(210, 60, 0.05, 'square', 0.13, 0.03); },
   stomp:  () => tone(420, 80, 0.13, 'triangle', 0.20, 0),
-  kick:   () => tone(500, 150, 0.10, 'square', 0.15, 0),
-  grow:   () => [262, 330, 392, 523, 660, 784].forEach((f, i) => tone(f, f, 0.08, 'square', 0.13, i * 0.05)),
-  shrink: () => [1047, 784, 659, 523, 392].forEach((f, i) => tone(f, f, 0.07, 'square', 0.13, i * 0.05)),
+  kick:   () => pulse(500, 150, 0.10, '12', 0.15, 0, true),
+  grow:   () => [262, 330, 392, 523, 660, 784].forEach((f, i) => pulse(f, f, 0.08, '25', 0.13, i * 0.05)),
+  shrink: () => [1047, 784, 659, 523, 392].forEach((f, i) => pulse(f, f, 0.07, '25', 0.13, i * 0.05)),
   death:  () => [494, 466, 440, 415, 392, 330, 262, 196].forEach((f, i) => tone(f, f, 0.12, 'square', 0.15, i * 0.11)),
-  fire:   () => tone(880, 220, 0.12, 'sawtooth', 0.12, 0),
+  fire:   () => pulse(880, 220, 0.12, '12', 0.12, 0, true),
   sprout: () => tone(220, 660, 0.10, 'square', 0.12, 0),
-  star:   () => [1319, 1568, 1976, 2637].forEach((f, i) => tone(f, f, 0.07, 'square', 0.13, i * 0.045)),
+  star:   () => [1319, 1568, 1976, 2637].forEach((f, i) => pulse(f, f, 0.07, '25', 0.13, i * 0.045, true)),
   flag:   () => [392, 523, 659, 784, 880, 1047].forEach((f, i) => tone(f, f, 0.09, 'triangle', 0.12, i * 0.07)),
   win:    () => [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, f, 0.16, 'square', 0.13, i * 0.08)),
   oneup:  () => [660, 880, 1100, 1320, 1560, 1760].forEach((f, i) => tone(f, f, 0.07, 'square', 0.12, i * 0.055)),
@@ -2228,7 +2480,7 @@ function jumpSfx(vx) {
   ensureAudio();
   if (!actx) return;
   const k = Math.min(1, vx / MAX_SPEED);
-  tone(260 + k * 120, 640 + k * 260, 0.16, 'square', 0.13, 0);
+  pulse(260 + k * 120, 640 + k * 260, 0.16, '12', 0.13, 0);
 }
 /** 短乐句 stinger：一次性 1 秒级动机，只给“事件”用（Boss 击破/挑战失败），不进入循环 */
 function stinger(name) {
@@ -2321,7 +2573,7 @@ function bgmTick() {
   while (bgmNext < actx.currentTime + 0.4) {                            // 前瞻 0.4s 排音
     const when = bgmNext - actx.currentTime;
     const m = mel[bgmIdx % mel.length];
-    if (m) tone(midi2f(m), midi2f(m), eighth * 0.85, 'square', melVol, when);
+    if (m) pulse(midi2f(m), midi2f(m), eighth * 0.85, '12', melVol, when);   // 主旋律：12.5% 脉冲波（NES 味）
     if (bgmIdx % 2 === 0) {
       const b = bas[(bgmIdx >> 1) % bas.length];
       if (b) tone(midi2f(b), midi2f(b), eighth * 1.7, 'triangle', basVol, when);
@@ -2425,8 +2677,34 @@ function buildTiles(T) {
       Q.forEach((r, y) => { for (let x = 0; x < 5; x++)
         if (r[x] === '1') rect(g, 10 + x * 2, 8 + y * 2, 2, 2, '#ffd23f'); });
     }),
+    /* 挑战房三瓦片（固定橙红，识别度优先于主题统一）：橙砖墙 / 机关砖 / 金库闸门 */
+    [T_CBRICK]: makeTile(g => {                       // 橙红砖：挑战房墙面/地面，一眼区分金币房蓝砖
+      rect(g, 0, 0, 32, 32, '#cc5a1e');
+      rect(g, 0, 0, 32, 2, '#ff9440');
+      rect(g, 0, 14, 32, 2, '#6a1a08'); rect(g, 0, 30, 32, 2, '#6a1a08');
+      rect(g, 15, 2, 2, 12, '#6a1a08'); rect(g, 0, 16, 2, 14, '#6a1a08'); rect(g, 31, 16, 1, 14, '#6a1a08');
+    }),
+    [T_SWITCH]: makeTile(g => {                       // 机关砖（未点亮）：橙底 + 中央暗块，提示"可顶"
+      rect(g, 0, 0, 32, 32, '#e88a28');
+      rect(g, 0, 0, 32, 2, '#6a2a00'); rect(g, 0, 30, 32, 2, '#6a2a00');
+      rect(g, 0, 0, 2, 32, '#6a2a00'); rect(g, 30, 0, 2, 32, '#6a2a00');
+      rect(g, 11, 11, 10, 10, '#6a2a00');
+    }),
+    [T_GATE]: makeTile(g => {                         // 金库闸门（未开启）：橙红竖栏杆实体墙
+      rect(g, 0, 0, 32, 32, '#b8431e');
+      rect(g, 0, 0, 32, 2, '#7a1a08'); rect(g, 0, 30, 32, 2, '#7a1a08');
+      rect(g, 0, 0, 2, 32, '#7a1a08'); rect(g, 30, 0, 2, 32, '#7a1a08');
+      for (let x = 5; x < 32; x += 8) rect(g, x, 3, 3, 26, '#7a1a08');
+    }),
   };
 }
+/* 机关砖点亮态（独立常量：map 仍记 T_SWITCH，点亮时渲染换此精灵） */
+const SWITCH_ON_SPR = makeTile(g => {
+  rect(g, 0, 0, 32, 32, '#28c04a');
+  rect(g, 0, 0, 32, 2, '#0a5a20'); rect(g, 0, 30, 32, 2, '#0a5a20');
+  rect(g, 0, 0, 2, 32, '#0a5a20'); rect(g, 30, 0, 2, 32, '#0a5a20');
+  rect(g, 12, 12, 8, 8, '#eaffea');
+});
 /* 管道：顶盖/管身 × 左右两半（外缘描边，接缝不断开）；吊管口用顶盖精灵上下翻转 */
 function buildPipes(T) {
   const mk = (top, left) => makeTile(g => {
@@ -3445,6 +3723,9 @@ function render() {
         ctx.restore();
       } else ctx.drawImage(!above ? (left ? PS.TL : PS.TR) : (left ? PS.BL : PS.BR), sx, sy);
     }
+    else if (t === T_SWITCH) {                        // 机关砖：7s 内亮绿、超时自动回橙（实时判定，与开闸同一口径）
+      ctx.drawImage(crIsLit(tx + ',' + ty) ? SWITCH_ON_SPR : TS[T_SWITCH], sx, sy);
+    }
     else ctx.drawImage(TS[t], sx, sy);
   }
   if (world === 'over') drawPlants();
@@ -3699,10 +3980,13 @@ function drawHUD() {
   drawPixNum(hiScore, 6, VIEW_W / 2 - 24, 27, 2, '#ffd23f');
   ctx.textAlign = 'right';
   shadowText(LEVEL_NAME, VIEW_W - 14, 32, 16);
-  const tl = Math.max(0, Math.ceil(TIME_LIMIT - gameTime));          // 倒计时：≤60s 红闪
-  const timeBlink = tl <= 60 && Math.floor(coinT * 2) % 2 === 0;
-  shadowText('TIME', VIEW_W - 14, 50, 12, timeBlink ? '#ff5a5a' : '#cfe3ff');
-  drawPixNum(tl, 3, VIEW_W - 14 - 24, 54, 2, timeBlink ? '#ff5a5a' : '#ffffff');
+  const tLeft = TIME_LIMIT - gameTime;
+  const tl = Math.max(0, Math.ceil(tLeft));
+  const danger = tLeft <= 60, urgent = tLeft <= 30, critical = tLeft <= 10;   // 紧迫四档：白→黄→橙→红
+  const tCol = !danger ? '#ffffff' : critical ? '#ff2020' : urgent ? '#ff8a00' : '#ffd23f';
+  const timeBlink = danger && Math.floor(coinT * (critical ? 12 : urgent ? 6 : 2)) % 2 === 0;  // 每档闪烁加速
+  shadowText('TIME', VIEW_W - 14, 50, 12, danger ? (critical ? '#ff2020' : '#ff5a5a') : '#cfe3ff');
+  drawPixNum(tl, 3, VIEW_W - 14 - 24, 54, 2, timeBlink ? '#ffffff' : tCol);
   if (!audioOn) shadowText('静音(M)', VIEW_W - 14, 68, 12, '#cfe3ff');
   ctx.textAlign = 'left';
   if (showFps) {
@@ -3712,6 +3996,7 @@ function drawHUD() {
   }
 
   drawBossRoomHUD();                                 // Boss 房专属 HUD（先画，结算浮层可覆盖它）
+  drawChallengeHUD();                                // 挑战房 HUD：倒计时 + 机关进度（Boss 房外才可能激活）
   const blink = Math.floor(coinT * 2) % 2 === 0;
   if (gameState === 'win') {
     ctx.fillStyle = 'rgba(10,10,30,.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -3816,6 +4101,7 @@ function frame(now) {
   if (n === 8) acc = 0;                                // 追帧上限，防螺旋恶化
   render();                                            // 渲染每帧一次
   bgmTick();                                           // BGM 排音（用户手势解锁 AudioContext 后自动起播）
+  if (manualBtnEl) manualBtnEl.style.display = (!manualOpen && (gameState === 'title' || gameState === 'pause' || gameState === 'gameover' || gameState === 'win')) ? 'block' : 'none';
 }
 respawn();
 applyLayoutMode();                                   // 同步定档：触屏首帧即为横屏（真横屏或 CSS 旋转），不等 rAF
@@ -3850,7 +4136,9 @@ window.__ENGINE = {
   get timeLeftInt() { return timeLeftInt; }, get timeBonus() { return timeBonus; },
   get fxTypes() { return effects.map(e => e.type); }, multiBricks, starBricks,
   get poleBonus() { return poleBonus; },
-  /* ---- Boss 奖励房（自动化测试入口） ---- */
+  /* ---- 挑战房 / Boss 房（自动化测试入口） ---- */
+  challengeRoom, T_SWITCH, T_GATE, T_CBRICK, CR_SWITCHES, CR_SWITCH_LIT_T, CR_TIME, CR_SPEED_BONUS_T, buildChallengeMap,
+  enterChallenge, closeChallenge, hitSwitch, openGate, updateChallenge, drawChallengeHUD, crIsLit, crLitCount,
   bossRoom, T_SHOP, BR_SHOP, buildBossRoomMap, buyShopItem, enterBossRoom, closeBossRoom,
   settleRoomCoins, roomCoin, spawnCoinRain, updateBossRoom,
   /* ---- 音频（自动化测试入口：可驱动排音并检查实际落到 AudioParam 的数值） ---- */
@@ -3861,6 +4149,145 @@ window.__ENGINE = {
   /* ---- 布局（自动化入口：改视口后同步重算，再读 body.class 判定姿态分支） ---- */
   applyLayoutMode, fitStage,
 };
+
+/* ======================== 12. 玩法说明模态窗 ======================== */
+const MANUAL_PAGES = [
+  { h: `<h2><span class="tag">①</span>基 本 操 作</h2>
+<table>
+<tr><th style="width:38%">动作</th><th>键盘</th><th>触屏（自动横屏）</th></tr>
+<tr><td class="k">移动</td><td><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd></td><td>左区 ◀ ▶</td></tr>
+<tr><td class="k">奔跑</td><td><kbd>Shift</kbd></td><td>左肩位「跑」</td></tr>
+<tr><td class="k">跳跃</td><td><kbd>空格</kbd> / <kbd>W</kbd> / <kbd>↑</kbd></td><td>右区「跳」</td></tr>
+<tr><td class="k">蹲下 / 入管</td><td><kbd>S</kbd> / <kbd>↓</kbd></td><td>左区「▼」</td></tr>
+<tr><td class="k">火球</td><td><kbd>J</kbd> / <kbd>X</kbd></td><td>右区「火」</td></tr>
+<tr><td class="k">音效</td><td><kbd>M</kbd></td><td>右上 Ⅱ</td></tr>
+<tr><td class="k">暂停 / 重开</td><td><kbd>P</kbd> / <kbd>R</kbd></td><td>Ⅱ 暂停</td></tr>
+<tr><td class="k">玩法说明</td><td><kbd>H</kbd></td><td>右上「?」按钮</td></tr>
+</table>
+<p class="dim">标题界面 ↑↓ 选关（自动跳过未解锁），任意键开始；解锁进度与单关最高分自动存档。</p>` },
+  { h: `<h2><span class="tag">②</span>行 动 准 则</h2>
+<ul>
+<li><span class="hl">跳跃高度可变</span>：长按跳得高（静止最多约 4 格），轻点跳得矮。</li>
+<li><span class="hl">踩敌人</span>：从上方落下即击杀并反弹；踩中瞬间按住跳可弹得更高。</li>
+<li><span class="hl">冲刺跳</span>：按住奔跑起跳距离最远，许多深坑只有冲刺跳能过。</li>
+<li><span class="hl">宽容手感</span>：离开平台后有短暂“土狼时间”仍可起跳，落地前预输入跳跃同样有效。</li>
+<li><span class="rd">摔进深坑 = 直接 Game Over</span>（无论剩几条命）；倒计时归零同样直接结束。</li>
+<li>受伤或死亡后从<span class="hl">中途检查点</span>重生（倒计时继续，不重置）。</li>
+</ul>` },
+  { h: `<h2><span class="tag">③</span>成 长 系 统</h2>
+<table>
+<tr><th style="width:26%">道具</th><th>效果</th><th>出处</th></tr>
+<tr><td class="k">超级蘑菇</td><td>小→大形态，可受击一次，受伤降级并有短暂无敌帧</td><td>?砖、隐藏砖</td></tr>
+<tr><td class="k">火之花</td><td>获火球术：同屏最多 2 颗，弹地前进，撞墙熄灭</td><td>?砖</td></tr>
+<tr><td class="k">无敌星</td><td>限时无敌，碰到敌人直接击飞</td><td>特定普通砖</td></tr>
+<tr><td class="k">1UP蘑菇</td><td>生命 +1（上限 99）</td><td>隐藏砖</td></tr>
+<tr><td class="k">金币</td><td>每枚 +200 分；<span class="gn">集满 100 枚换 1UP</span></td><td>地上 / 砖内 / 金币房</td></tr>
+<tr><td class="k">十三金币砖</td><td>连顶 10 次吐金币</td><td>1-1 / 1-2 各一块</td></tr>
+</table>` },
+  { h: `<h2><span class="tag">④</span>敌 人 图 鉴</h2>
+<table>
+<tr><th style="width:24%">敌人</th><th>习性</th><th>应对</th></tr>
+<tr><td class="k">板栗仔</td><td>直线行进，遇障折返</td><td>踩 / 火球</td></tr>
+<tr><td class="k">乌龟（绿）</td><td>直线行进，踩后缩壳</td><td>踩缩壳 → 再踩踢飞，壳撞敌 +400 连杀</td></tr>
+<tr><td class="k">红乌龟</td><td><span class="hl">在平台边缘折返</span>，不落地</td><td>踩 / 火球（1-3 岛链常驻）</td></tr>
+<tr><td class="k">跳跳龟</td><td>落地即弹起，节奏型逼近</td><td>看准落点间隙踩</td></tr>
+<tr><td class="k">食人花</td><td>守管口（含天花板倒挂吊管）伸缩</td><td>等缩回通过 / 火球</td></tr>
+</table>` },
+  { h: `<h2><span class="tag">⑤</span>计 分 表</h2>
+<table>
+<tr><th>事件</th><th>得分</th><th>事件</th><th>得分</th></tr>
+<tr><td>金币</td><td class="hl">200</td><td>踩敌 / 顶砖</td><td class="hl">100 / 50</td></tr>
+<tr><td>吃成长道具</td><td class="hl">1000</td><td>龟壳连杀</td><td class="hl">400</td></tr>
+<tr><td>火球击杀</td><td class="hl">200</td><td>抓旗杆</td><td class="hl">按高度加成</td></tr>
+<tr><td colspan="2">过关剩余时间</td><td colspan="2" class="hl">×50 逐秒折算</td></tr>
+</table>
+<p class="dim">过关仪式完整保留：抓杆滑落 → 走进城堡 → 升旗 + 烟火（剩余时间个位 1/3/6 决定发数）→ 时间折算入账。</p>` },
+  { h: `<h2><span class="tag">⑥</span>世 界 地 图</h2>
+<table>
+<tr><th style="width:20%">关卡</th><th style="width:12%">时限</th><th>主题与要点</th></tr>
+<tr><td><span class="lv">1-1</span></td><td>400</td><td>经典地上关：两根水管通地下——一座<span class="hl">金币房</span>，一座<span class="hl">机关挑战房</span>。隐藏 1UP 砖与无敌星砖都在高处。</td></tr>
+<tr><td><span class="lv">1-2</span></td><td>400</td><td>地下关：天花板吊管倒挂食人花、越爬越高的管阵；两座金币房；<span class="hl">终点前入管近道</span>直插旗杆前。</td></tr>
+<tr><td><span class="lv">1-3</span></td><td>300</td><td>高空关：浮空岛链跨深渊 + 水平升降台；红乌龟守岛、跳跳龟拦路，<span class="hl">无水管无地下房</span>，一条命跑到底。</td></tr>
+<tr><td><span class="lv">1-4</span></td><td>300</td><td><span class="rd">最终决战</span>：城堡前奏走廊直通 Boss 房，打赢库巴即通关见公主。</td></tr>
+</table>
+<p class="dim">通关 1-4 见公主，全流程约 15~20 分钟；每关独立最高分自动记录。</p>` },
+  { h: `<h2><span class="tag">⑦</span>机 关 挑 战 房 <span class="c">（1-1 · col46 水管）</span></h2>
+<div class="boss" style="border-color:#cc5a1e;box-shadow:inset 0 0 0 2px #7a2a08;background:#2a1a18;">
+<p>橙红墙面的<span class="hl">路线谜题房</span>：机关砖亮 <span class="hl">7 秒就熄灭</span>，必须让 3 座<span class="hl">同时亮着</span>才开金库闸门——考的是先后顺序，不是手速。</p>
+<ul>
+<li><span class="hl">唯一解路线</span>：先顶<span class="gn">最远</span>的，折返途中依次点亮中间的，最后点门口那座——顺序反了前功尽弃。</li>
+<li><span class="hl">重复顶 = 续亮</span>：快熄灭时再顶一次可刷新 7 秒，容错靠补刀。</li>
+<li><span class="hl">板栗仔是踏板</span>：踩它弹跳能轻松够到高机关，还顺带连击分。</li>
+<li><span class="gn">速通奖励</span>：开门时剩余 ≥20 秒 → <span class="gn">PERFECT +2000</span>；金库深处另有 <span class="gn">1UP</span>。</li>
+<li><span class="rd">30 秒总时限</span>：够你失败后原地重试一两轮；超时或死亡则出房重来。</li>
+</ul>
+</div>` },
+  { h: `<h2><span class="tag">⑧</span>资 源 管 理 Boss 房 <span class="c">（1-4 最终决战）</span></h2>
+<div class="boss">
+<p>把金币从“分数”变成<span class="hl">战斗资源</span>的隐藏关：入房强制变小形态，并发给 <span class="hl">100 枚房内金币</span>（独立于全局）。想活着出来，先花钱，再打赢。</p>
+<table>
+<tr><th style="width:22%">商品（顶砖购买）</th><th style="width:14%">价格</th><th>效果</th></tr>
+<tr><td class="k">二段跳</td><td>50</td><td>空中可再跳一次（落地恢复）</td></tr>
+<tr><td class="k">加速跑</td><td>30</td><td>移动速度 ×1.3</td></tr>
+<tr><td class="k">火球术</td><td>80</td><td>小形态也能扔火球</td></tr>
+<tr><td class="k">无敌</td><td>100</td><td>8 秒受击不扣血（只免疫伤害，不替你打 Boss；砖 10 秒恢复，可续购）</td></tr>
+</table>
+<ul>
+<li><span class="rd">库巴（5 血）</span>：越过商店区即激活；踩头 -1 血并眩晕 1 秒，火球 -1 血硬直 0.3 秒；会扔锤（残血后双发）和喷火。</li>
+<li><span class="rd">逃跑惩罚</span>：激活后退回商店区，库巴归位并<span class="rd">回血 1 格</span>——别想反复进出磨血。</li>
+<li><span class="gn">击破结算</span>：剩余房内金币 <span class="gn">×2 入账 + 1UP</span>，并随机奖励火之花或无敌星；1-4 击败后<span class="gn">直接通关见公主</span>。</li>
+<li><span class="rd">房内死亡</span>：已花的不退，剩余余额按 50% 折算入全局，再走正常重生流程。</li>
+<li><span class="dim">打不过想跑：站回入口管口按 ↓ 主动退出（余额折半入账）。</span></li>
+</ul>
+</div>` },
+  { h: `<h2><span class="tag">⑨</span>老 玩 家 秘 传</h2>
+<ul>
+<li>1-1 开局连续顶 <span class="hl">?</span> 砖攒分，第三块起有蘑菇。</li>
+<li>冲刺跳 + 踩敌按跳反弹，是 1-3 岛链抄近路的钥匙。</li>
+<li>金币房金币是“死钱”，Boss 房金币是“军费”——进 Boss 房前先在金币房吃饱。</li>
+<li>受击后的 2 秒无敌帧可以硬穿一只板栗仔，别浪费。</li>
+<li>时间就是分数：旗杆前每剩 1 秒 = 50 分。</li>
+<li><span class="dim">任何时候按 <kbd>H</kbd> 或点右上「?」可随时翻阅本说明。</span></li>
+</ul>
+<p class="dim" style="text-align:center;margin-top:18px;">— 纯 HTML + Canvas · 零依赖 · 单文件运行 —</p>` },
+];
+let manualOpen = false, manualPage = 0, manualPrevState = '';
+const manualBtnEl = document.getElementById('manualBtn');
+const manualOverlayEl = document.getElementById('manual-overlay');
+function openManual() {
+  manualPrevState = gameState;
+  if (gameState === 'play') gameState = 'pause';   // 冻结物理（frame 主循环跳过 pause 态 update）
+  manualPage = 0; manualOpen = true;
+  if (manualOverlayEl) { renderManual(); manualOverlayEl.style.display = 'flex'; }
+}
+function closeManual() {
+  manualOpen = false;
+  if (manualOverlayEl) manualOverlayEl.style.display = 'none';
+  if (manualPrevState === 'play' && gameState === 'pause') gameState = 'play';   // 从 play 暂停进来的 → 恢复
+  manualPrevState = '';
+}
+function manualGo(d) {
+  manualPage = Math.max(0, Math.min(MANUAL_PAGES.length - 1, manualPage + d));
+  renderManual();
+}
+function renderManual() {
+  const p = MANUAL_PAGES[manualPage];
+  const body = document.getElementById('manual-body');
+  const pager = document.getElementById('manual-pager');
+  if (body) body.innerHTML = p.h;
+  if (pager) pager.textContent = (manualPage + 1) + ' / ' + MANUAL_PAGES.length;
+  const prev = document.getElementById('manual-prev'), next = document.getElementById('manual-next');
+  if (prev) prev.style.visibility = manualPage === 0 ? 'hidden' : 'visible';
+  if (next) next.style.visibility = manualPage === MANUAL_PAGES.length - 1 ? 'hidden' : 'visible';
+}
+(function bindManual() {
+  const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); };
+  bind('manualBtn', openManual);
+  bind('manual-close', closeManual);
+  bind('manual-prev', () => manualGo(-1));
+  bind('manual-next', () => manualGo(1));
+  if (manualOverlayEl) manualOverlayEl.addEventListener('pointerdown', e => { if (e.target === manualOverlayEl) closeManual(); });   // 点遮罩空白关闭
+})();
 </script>
 </body>
 </html>
