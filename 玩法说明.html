@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>像素马里奥 · 玩法说明</title>
+<style>
+  /* ---- 8-bit 复古风：与游戏本体同款配色（夜空底 / 天空蓝 / 金币黄 / 荧光绿） ---- */
+  :root{
+    --bg:#141428; --panel:#1c1c3a; --ink:#f5f6fa; --dim:#9fb4d0;
+    --gold:#ffd23f; --red:#ff5a5a; --green:#7ae048; --cyan:#5ad0ff; --sky:#5c94fc;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"SimSun","NSimSun","Microsoft YaHei",monospace;
+    line-height:1.8; letter-spacing:1px;
+    display:flex; flex-direction:column; align-items:center; padding:34px 14px 60px;
+  }
+  /* 扫描线氛围层 */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 2px,transparent 2px 4px);}
+  .wrap{width:min(860px,100%);}
+
+  /* ---- 标题：HUD 风格 ---- */
+  .hud{
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+    background:#000;border:4px solid #000;box-shadow:inset 0 0 0 2px #3a3a5e;
+    padding:10px 18px;margin-bottom:22px;font-weight:bold;color:#fff;
+  }
+  .hud b{color:var(--gold);}
+  h1{
+    text-align:center;font-size:clamp(22px,4.5vw,34px);color:var(--gold);
+    text-shadow:3px 3px 0 #b35c00,6px 6px 0 #000;margin:6px 0 2px;letter-spacing:4px;
+  }
+  .subtitle{text-align:center;color:var(--dim);margin-bottom:26px;font-size:13px;}
+  .subtitle .blink{color:var(--green);animation:blink 1s steps(2) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  /* ---- 卡片 ---- */
+  .card{
+    background:var(--panel);border:4px solid #000;box-shadow:inset 0 0 0 2px #3a3a5e;
+    padding:18px 20px;margin-bottom:22px;
+  }
+  h2{
+    font-size:17px;color:#fff;margin-bottom:14px;letter-spacing:3px;
+    border-bottom:3px dashed #3a3a5e;padding-bottom:8px;
+  }
+  h2 .tag{display:inline-block;background:var(--gold);color:#000;padding:0 8px;margin-right:10px;
+    box-shadow:2px 2px 0 #000;font-size:14px;}
+  h2 .c{color:var(--gold);}
+  p{margin-bottom:8px;font-size:14px;}
+  .dim{color:var(--dim);}
+  .hl{color:var(--gold);}
+  .rd{color:var(--red);font-weight:bold;}
+  .gn{color:var(--green);font-weight:bold;}
+  .cn{color:var(--cyan);font-weight:bold;}
+
+  /* ---- 表格：问号砖配色 ---- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0;}
+  th,td{border:2px solid #000;padding:7px 10px;text-align:left;vertical-align:top;}
+  th{background:#c87137;color:#fff;box-shadow:inset 0 0 0 1px #8a4a1d;letter-spacing:2px;}
+  tr:nth-child(even) td{background:#23234a;}
+  tr:nth-child(odd) td{background:#1a1a38;}
+  td.k{color:var(--gold);white-space:nowrap;font-weight:bold;}
+
+  kbd{
+    display:inline-block;background:#000;color:#fff;border:2px solid #fff;
+    box-shadow:2px 2px 0 #5a5a8a;padding:0 7px;margin:0 2px;font-size:12.5px;
+    font-family:inherit;white-space:nowrap;
+  }
+  ul{padding-left:2px;list-style:none;font-size:14px;}
+  ul li{padding-left:20px;position:relative;margin-bottom:6px;}
+  ul li::before{content:"◆";position:absolute;left:0;color:var(--gold);font-size:11px;top:5px;}
+
+  /* 关卡徽章 */
+  .lv{display:inline-block;background:var(--sky);color:#000;font-weight:bold;
+    padding:0 8px;box-shadow:2px 2px 0 #000;margin-right:8px;}
+  .boss-box{border-color:#8a2b2b;box-shadow:inset 0 0 0 2px #5a1a1a;background:#2a1a28;}
+  .boss-box h2 .tag{background:var(--red);color:#fff;}
+  .footnote{text-align:center;color:var(--dim);font-size:12px;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HUD 顶栏：模仿游戏内计分栏 -->
+  <div class="hud">
+    <span>马里奥 <b>000000</b></span>
+    <span><b>×</b> 金币 <b>00</b></span>
+    <span>WORLD <b>1-1</b></span>
+    <span>TIME <b>400</b></span>
+    <span>生命 <b>×3</b></span>
+  </div>
+
+  <h1>★ 像素马里奥 ★</h1>
+  <p class="subtitle">—— 玩 法 说 明 ——&nbsp;&nbsp;<span class="blink">PRESS START!</span></p>
+
+  <!-- ① 操作 -->
+  <div class="card">
+    <h2><span class="tag">①</span>基 本 操 作</h2>
+    <table>
+      <tr><th style="width:38%">动作</th><th>键盘</th><th>触屏（自动横屏）</th></tr>
+      <tr><td class="k">移动</td><td><kbd>A</kbd><kbd>D</kbd> 或 <kbd>←</kbd><kbd>→</kbd></td><td>左区 <kbd>◀</kbd><kbd>▶</kbd></td></tr>
+      <tr><td class="k">奔跑</td><td><kbd>Shift</kbd></td><td>左肩位 <kbd>跑</kbd></td></tr>
+      <tr><td class="k">跳跃</td><td><kbd>空格</kbd> / <kbd>W</kbd> / <kbd>↑</kbd></td><td>右区 <kbd>跳</kbd>（大按钮）</td></tr>
+      <tr><td class="k">蹲下 / 入管</td><td><kbd>S</kbd> / <kbd>↓</kbd></td><td>左区 <kbd>▼</kbd></td></tr>
+      <tr><td class="k">火球</td><td><kbd>J</kbd> / <kbd>X</kbd></td><td>右区 <kbd>火</kbd></td></tr>
+      <tr><td class="k">音效开关</td><td><kbd>M</kbd></td><td>右上 <kbd>Ⅱ</kbd> 为暂停</td></tr>
+      <tr><td class="k">暂停 / 重开</td><td><kbd>P</kbd> / <kbd>R</kbd></td><td><kbd>Ⅱ</kbd> 暂停 · <kbd>⛶</kbd> 全屏</td></tr>
+    </table>
+    <p class="dim">标题界面用 <kbd>↑</kbd><kbd>↓</kbd> 选关（已解锁关卡），任意键开始；解锁进度与单关最高分自动存档。</p>
+  </div>
+
+  <!-- ② 行动准则 -->
+  <div class="card">
+    <h2><span class="tag">②</span>行 动 准 则</h2>
+    <ul>
+      <li><span class="hl">跳跃高度可变</span>：长按跳得高（静止最多约 4 格），轻点跳得矮——钻缝、踩头全靠手感。</li>
+      <li><span class="hl">踩敌人</span>：从上方落下即击杀并反弹；<span class="hl">踩中瞬间按住跳</span>可弹得更高。</li>
+      <li><span class="hl">冲刺跳</span>：按住奔跑起跳，距离最远；许多深坑只有冲刺跳能过。</li>
+      <li><span class="hl">宽容手感</span>：离开平台后有短暂"土狼时间"仍可起跳，落地前预输入跳跃同样有效。</li>
+      <li><span class="rd">摔进深坑 = 直接 Game Over</span>（无论剩几条命）；倒计时归零同样直接结束。</li>
+      <li>受伤或死亡后从<span class="hl">中途检查点</span>重生（倒计时继续，不重置）。</li>
+    </ul>
+  </div>
+
+  <!-- ③ 成长系统 -->
+  <div class="card">
+    <h2><span class="tag">③</span>成 长 系 统</h2>
+    <table>
+      <tr><th style="width:26%">道具</th><th>效果</th><th>出现位置</th></tr>
+      <tr><td class="k">超级蘑菇</td><td>小 → 大形态（可受击一次，受伤降级并有短暂无敌帧）</td><td><span class="hl">?</span> 砖、隐藏砖</td></tr>
+      <tr><td class="k">火之花</td><td>获得火球术：同屏最多 2 颗，弹地前进，撞墙熄灭</td><td><span class="hl">?</span> 砖</td></tr>
+      <tr><td class="k">无敌星</td><td>限时无敌，碰到敌人直接击飞</td><td>特定普通砖内（1-1 / 1-2 各一颗）</td></tr>
+      <tr><td class="k">1UP 蘑菇</td><td>生命 +1（上限 99）</td><td>隐藏砖（多为高分跳跃奖励）</td></tr>
+      <tr><td class="k">金币</td><td>每枚 +200 分；<span class="gn">集满 100 枚换 1UP</span></td><td>地上、砖内、金币房</td></tr>
+      <tr><td class="k">十三金币砖</td><td>连顶 10 次吐金币</td><td>1-1 / 1-2 各一块</td></tr>
+    </table>
+  </div>
+
+  <!-- ④ 敌人图鉴 -->
+  <div class="card">
+    <h2><span class="tag">④</span>敌 人 图 鉴</h2>
+    <table>
+      <tr><th style="width:24%">敌人</th><th>习性</th><th>应对</th></tr>
+      <tr><td class="k">板栗仔</td><td>直线行进，遇障折返</td><td>踩 / 火球</td></tr>
+      <tr><td class="k">乌龟（绿）</td><td>直线行进，踩后缩壳</td><td>踩缩壳 → 再踩踢飞，壳撞敌 +400 连杀</td></tr>
+      <tr><td class="k">红乌龟</td><td><span class="hl">在平台边缘折返</span>，不落地</td><td>踩 / 火球（1-3 岛链常驻）</td></tr>
+      <tr><td class="k">跳跳龟</td><td>落地即弹起，节奏型逼近</td><td>看准落点间隙踩</td></tr>
+      <tr><td class="k">食人花</td><td>守在管口（含天花板倒挂吊管）伸缩</td><td>等缩回时通过 / 火球</td></tr>
+    </table>
+  </div>
+
+  <!-- ⑤ 计分 -->
+  <div class="card">
+    <h2><span class="tag">⑤</span>计 分 表</h2>
+    <table>
+      <tr><th>事件</th><th>得分</th><th>事件</th><th>得分</th></tr>
+      <tr><td>金币</td><td class="hl">200</td><td>踩敌 / 顶砖</td><td class="hl">100 / 50</td></tr>
+      <tr><td>吃成长道具</td><td class="hl">1000</td><td>龟壳连杀</td><td class="hl">400</td></tr>
+      <tr><td>火球击杀</td><td class="hl">200</td><td>抓旗杆</td><td class="hl">按高度加成</td></tr>
+      <tr><td colspan="2">过关剩余时间</td><td colspan="2" class="hl">×50 逐秒折算</td></tr>
+    </table>
+    <p class="dim">过关仪式完整保留：抓杆滑落 → 走进城堡 → 升旗 + 烟花（剩余时间个位 1/3/6 决定发数）→ 时间折算入账。</p>
+  </div>
+
+  <!-- ⑥ 关卡 -->
+  <div class="card">
+    <h2><span class="tag">⑥</span>世 界 地 图</h2>
+    <table>
+      <tr><th style="width:20%">关卡</th><th style="width:12%">时限</th><th>主题与要点</th></tr>
+      <tr>
+        <td><span class="lv">1-1</span></td><td>400</td>
+        <td>经典地上关：两根水管通地下——一根<span class="hl">金币房</span>，一根<span class="rd">Boss 房</span>（见下节）。隐藏 1UP 砖与无敌星砖都在高处。</td>
+      </tr>
+      <tr>
+        <td><span class="lv">1-2</span></td><td>400</td>
+        <td>地下关：天花板吊管倒挂食人花、越爬越高的管阵；两座金币房；<span class="hl">终点前有入管近道</span>直插旗杆前。</td>
+      </tr>
+      <tr>
+        <td><span class="lv">1-3</span></td><td>300</td>
+        <td>高空关：浮空岛链跨深渊 + 水平升降台；红乌龟守岛、跳跳龟拦路，<span class="hl">无水管无地下房</span>，一条命跑到底。</td>
+      </tr>
+    </table>
+    <p class="dim">通关 1-3 见公主，全流程约 15~20 分钟；每关独立最高分自动记录。</p>
+  </div>
+
+  <!-- ⑦ Boss 房 -->
+  <div class="card boss-box">
+    <h2><span class="tag">⑦</span>资 源 管 理 Boss 房 <span class="c">（1-1 · col46 水管）</span></h2>
+    <p>把金币从"分数"变成<span class="hl">战斗资源</span>的隐藏关卡：入房强制变回小形态，并发给 <span class="hl">100 枚房内金币</span>（独立于全局余额）。想活着出来，先花钱，再打赢。</p>
+    <table>
+      <tr><th style="width:22%">商品（顶砖购买）</th><th style="width:14%">价格</th><th>效果</th></tr>
+      <tr><td class="k">二段跳</td><td>50</td><td>空中可再跳一次（85% 强度，落地恢复）</td></tr>
+      <tr><td class="k">加速跑</td><td>30</td><td>移动速度 ×1.3</td></tr>
+      <tr><td class="k">火球术</td><td>80</td><td>小形态也能扔火球</td></tr>
+      <tr><td class="k">无敌</td><td>100</td><td>8 秒受击不扣血（<span class="dim">只免疫伤害，不替你打 Boss</span>；砖 10 秒恢复，可续购）</td></tr>
+    </table>
+    <ul>
+      <li><span class="rd">库巴（5 血）</span>：越过商店区即激活；踩头 -1 血并眩晕 1 秒，火球 -1 血硬直 0.3 秒；会扔锤（残血后双发）和喷火。</li>
+      <li><span class="rd">逃跑惩罚</span>：激活后退回商店区，库巴归位并<span class="rd">回血 1 格</span>——别想反复进出磨血。</li>
+      <li><span class="gn">击破结算</span>：剩余房内金币 <span class="gn">×2 入账 + 1UP</span>，并随机奖励火之花或无敌星，3 秒后自动出房恢复原形态。</li>
+      <li><span class="rd">房内死亡</span>：已花的不退，剩余余额按 50% 折算入全局，再走正常重生流程。</li>
+      <li><span class="dim">打不过想跑：站回入口管口按 ↓ 主动退出（余额折半入账）。</span></li>
+    </ul>
+  </div>
+
+  <!-- ⑧ 提示 -->
+  <div class="card">
+    <h2><span class="tag">⑧</span>老 玩 家 秘 传</h2>
+    <ul>
+      <li>1-1 开局连续顶 <span class="hl">?</span> 砖攒分，第三块起有蘑菇。</li>
+      <li>冲刺跳 + 踩敌按跳反弹，是 1-3 岛链抄近路的钥匙。</li>
+      <li>金币房金币是"死钱"，Boss 房金币是"军费"——进 Boss 房前先在金币房吃饱。</li>
+      <li>受击后的 2 秒无敌帧可以硬穿一只板栗仔，别浪费。</li>
+      <li>时间就是分数：旗杆前每剩 1 秒 = 50 分。</li>
+    </ul>
+  </div>
+
+  <p class="footnote">— 纯 HTML + Canvas · 零依赖 · 单文件运行 —</p>
+</div>
+</body>
+</html>

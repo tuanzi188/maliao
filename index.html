@@ -31,15 +31,15 @@
   .tbtn{position:absolute;box-sizing:border-box;pointer-events:auto;width:60px;height:60px;border-radius:14px;background:rgba(8,12,30,.42);border:2px solid rgba(255,255,255,.55);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .06s ease,background .06s ease,border-color .06s ease;box-shadow:0 3px 8px rgba(0,0,0,.4);}
   /* 按压态：缩放 + 加深 + 白描边（.on 由 JS 置位，滑移换键时视觉同步；无震动的设备靠它补手感） */
   .tbtn:active,.tbtn.on{transform:scale(.92);background:rgba(8,12,30,.62);border-color:#ffffff;box-shadow:inset 0 0 0 2px rgba(0,0,0,.4),0 3px 8px rgba(0,0,0,.4);}
-  /* 竖屏：下排 [◀▼▶] 方向区 + [跑][跳] A/B 并排；上排 火 + 系统工具行 */
-  #btnL{left:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
-  #btnD{left:74px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
-  #btnR{left:138px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
-  #btnJ{right:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:76px;height:76px;font-size:26px;}
-  #btnB{right:94px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));}
-  #btnF{right:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));}
-  #btnP{left:10px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
-  #btnX{left:58px;bottom:calc(104px + env(safe-area-inset-bottom, 0px));width:40px;height:40px;font-size:15px;}
+  /* 竖屏：下排 [◀▼▶] 方向区 + [跑][跳] A/B 并排；上排 火 + 系统工具行（键体加大到 64~84px，相邻键 ≥8px 防误触） */
+  #btnL{left:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;}
+  #btnD{left:82px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;}
+  #btnR{left:154px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;}
+  #btnJ{right:10px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:84px;height:84px;font-size:28px;}
+  #btnB{right:102px;bottom:calc(24px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;}
+  #btnF{right:10px;bottom:calc(116px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;}
+  #btnP{left:10px;bottom:calc(116px + env(safe-area-inset-bottom, 0px));width:44px;height:44px;font-size:16px;}
+  #btnX{left:62px;bottom:calc(116px + env(safe-area-inset-bottom, 0px));width:44px;height:44px;font-size:16px;}
   /* 手柄式横屏按键：左带 = 方向（◀▶ 并排 + ▼ 居中其上）+ 左上肩位「跑」；右带 = 「跳」为主、「火」竖排其上，系统键右上。
      「跑」放肩位的理由：冲刺跳要同时占住「跑」与「跳」，若两键都在右拇指行程内则结构上无法完成；
      移交给左手食指后变成两个单手动作（左=跑+方向，右=跳），也不再需要滑移并存。
@@ -47,14 +47,14 @@
      已知取舍：视口极矮时（画布竖向几乎顶满）右上 44px 系统键会擦到画布顶角，与改造前的真横屏行为一致，不为它再砍画布。 */
   body.lay-x{--saL:env(safe-area-inset-left, 0px);--saR:env(safe-area-inset-right, 0px);--saT:env(safe-area-inset-top, 0px);}
   body.force-rot{--saL:env(safe-area-inset-bottom, 0px);--saR:env(safe-area-inset-top, 0px);--saT:env(safe-area-inset-left, 0px);}
-  body.lay-x #btnL{left:calc(2px + var(--saL));bottom:10px;width:56px;height:56px;}
-  body.lay-x #btnR{left:calc(68px + var(--saL));bottom:10px;width:56px;height:56px;}          /* 与 ◀ 留 10px 缝 */
-  body.lay-x #btnD{left:calc(44px + var(--saL));bottom:78px;width:48px;height:48px;font-size:19px;}   /* 与方向行留 12px，不再压在 ◀▶ 缝上 */
-  body.lay-x #btnB{left:calc(2px + var(--saL));top:calc(8px + var(--saT));width:62px;height:46px;font-size:19px;}
-  body.lay-x #btnJ{right:calc(2px + var(--saR));bottom:10px;width:78px;height:78px;font-size:26px;}
-  body.lay-x #btnF{right:calc(8px + var(--saR));bottom:96px;width:56px;height:56px;font-size:20px;}   /* 竖排在跳键上方：右带最深只到 80px，把画面宽度还给画布 */
-  body.lay-x #btnP{left:auto;right:calc(2px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:44px;height:44px;font-size:16px;}
-  body.lay-x #btnX{left:auto;right:calc(54px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:44px;height:44px;font-size:16px;}
+  body.lay-x #btnL{left:calc(2px + var(--saL));bottom:10px;width:64px;height:64px;}
+  body.lay-x #btnR{left:calc(76px + var(--saL));bottom:10px;width:64px;height:64px;}          /* 与 ◀ 留 10px 缝 */
+  body.lay-x #btnD{left:calc(44px + var(--saL));bottom:86px;width:56px;height:56px;font-size:21px;}   /* 与方向行留 12px，不再压在 ◀▶ 缝上 */
+  body.lay-x #btnB{left:calc(2px + var(--saL));top:calc(8px + var(--saT));width:68px;height:50px;font-size:20px;}
+  body.lay-x #btnJ{right:calc(2px + var(--saR));bottom:10px;width:88px;height:88px;font-size:28px;}
+  body.lay-x #btnF{right:calc(10px + var(--saR));bottom:106px;width:64px;height:64px;font-size:22px;}   /* 竖排在跳键上方：右带最深只到 90px，把画面宽度还给画布 */
+  body.lay-x #btnP{left:auto;right:calc(2px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:48px;height:48px;font-size:17px;}
+  body.lay-x #btnX{left:auto;right:calc(58px + var(--saR));bottom:auto;top:calc(8px + var(--saT));width:48px;height:48px;font-size:17px;}
   /* 横屏引导遮罩（兜底）：仅当连 CSS 旋转都不可用时才显示；正常触屏竖屏已被 force-rot 直接转成横向，不再拦路 */
   #rotate{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;
     gap:18px;background:rgba(10,10,25,.92);color:#fff;font-family:"Microsoft YaHei",monospace;text-align:center;}
@@ -471,7 +471,7 @@ const CR_SWITCH_LIT_T = 7;                          // 机关点亮后保持秒�
 const CR_SPEED_BONUS_T = 20, CR_SPEED_BONUS = 2000; // 开门时剩余 ≥20s → 速通加分（自我挑战，想再刷）
 const CR_SWITCHES = [[6,12],[15,8],[22,10]];        // 三座机关砖 [列,行]：入门低处 / 平台高处 / 远端
 const CR_GOOMBAS = [ {x: 11, vx: -GOOMBA_SPEED}, {x: 19, vx: GOOMBA_SPEED} ];   // 巡逻板栗仔：可踩当踏板弹上高机关
-const challengeRoom = { active:false, time:0, switches:{}, gateOpen:false, failed:false, msg:'', msgT:0 };
+const challengeRoom = { active:false, time:0, switches:{}, gateOpen:false, failed:false, msg:'', msgT:0, prevLit:0, hinted:false };
 function buildChallengeMap() {
   const W = CR_W, R = W - 1;
   const m = Array.from({ length: MAP_H }, () => new Array(W).fill(T_EMPTY));
@@ -487,6 +487,7 @@ function buildChallengeMap() {
 function enterChallenge() {
   const C = challengeRoom;
   C.active = true; C.time = CR_TIME; C.switches = {}; C.gateOpen = false; C.failed = false;
+  C.prevLit = 0; C.hinted = 0;
   C.msg = '挑战房：机关亮 ' + CR_SWITCH_LIT_T + ' 秒会熄灭，让 3 座同时亮开金库！'; C.msgT = 3.5;
   for (const g of CR_GOOMBAS) enemies.push({                       // 巡逻板栗仔：走位压力 + 可踩连击/踏板
     kind: 'goomba', x: g.x * TILE, y: GROUND_ROW * TILE - 24, w: 24, h: 24,
@@ -514,6 +515,7 @@ function hitSwitch(tx, row) {
   const C = challengeRoom, key = tx + ',' + row;
   if (C.active && !C.gateOpen && !C.failed && C.time > 0) {
     C.switches[key] = CR_TIME - C.time;              // 记录点亮时刻（重复顶 = 刷新续亮）
+    C.prevLit = crLitCount();                        // 同步基准：否则"点亮→熄灭"的下降沿会被漏检
     bumpTile(tx, row); sfx('grow');
     if (crLitCount() >= CR_SWITCHES.length) openGate();   // 三座同时亮 → 开闸
     else { C.msg = '同时亮 ' + crLitCount() + ' / 3'; C.msgT = 1; }
@@ -538,6 +540,13 @@ function updateChallenge(dt) {
   if (C.msgT > 0) C.msgT = Math.max(0, C.msgT - dt);
   if (!C.active || C.gateOpen) return;
   C.time -= dt;
+  /* 渐进式提示：机关熄灭的瞬间（lit 数下降）才给一次方向提示，最多两级，不剧透答案、不刷屏 */
+  const lit = crLitCount();
+  if (lit < C.prevLit && C.time > 0) {
+    if (C.hinted === 0) { C.msg = '提示：先顶最远的机关，折返路上再顶近的'; C.msgT = 3; C.hinted = 1; sfx('bump'); }
+    else if (C.hinted === 1) { C.msg = '提示：快熄灭时再顶一次可以续亮'; C.msgT = 3; C.hinted = 2; }
+  }
+  C.prevLit = lit;
   if (C.time <= 0) { C.time = 0; C.failed = true; C.switches = {}; C.msg = '时间到！金库反锁（出房后重来）'; C.msgT = 2.5; sfx('bump'); }
 }
 
@@ -669,8 +678,8 @@ function fitStage(force){
   const tipEl = document.querySelector('.tip');
   const tipH = (tipEl && tipEl.offsetHeight) || 0;
   const availH = Math.max(120, boxH - tipH - 24);                   // 24 = 画框上下边框 + 提示行间距
-  const band = Math.min(132, boxW * 0.2);     /* 两侧各留按键带深度：左带最深 124（▶ 68+56），右带 80（跳 2+78）
-                                                  取 132 留一点余量；再大会白丢画布面积（竖向本就吃紧） */
+  const band = Math.min(150, boxW * 0.22);    /* 两侧各留按键带深度：左带最深 140（▶ 76+64），右带 90（跳 2+88）
+                                                  取 150 留一点余量；再大会白丢画布面积（竖向本就吃紧） */
   const w = Math.min(boxW - band * 2, availH * (cvs.width / cvs.height), cvs.width);
   cvs.style.width = w.toFixed(1) + 'px';
   cvs.style.height = (w * cvs.height / cvs.width).toFixed(1) + 'px';
@@ -1195,6 +1204,26 @@ function aabb(a, b) {
 }
 
 /* ========================== 5. 道具 / 敌人 / 火球 ========================== */
+/* ---- 四色蘑菇池：power 砖 + 小形态时随机出货（每种效果固定可学习；大形态照旧出火之花，成长主线契约不变） ---- */
+function rollPowerPool() {
+  const r = Math.random() * 100;
+  if (r < 60) return 'mushroom';      // 红：变大（主体，保证升级节奏）
+  if (r < 75) return 'oneup';         // 绿：命 +1
+  if (r < 90) return 'coinshroom';    // 金：+2000 分
+  return 'poison';                    // 紫：大→小 / 小→-200 分
+}
+const MUSH_BANNER = {
+  mushroom:   '超级蘑菇！可以硬抗一次伤害',
+  oneup:      '1UP 蘑菇！生命 +1',
+  coinshroom: '金币蘑菇！直接 +2000 分',
+  poison:     '毒蘑菇！大的会缩水，小的扣 200 分',
+};
+const mushroomSeen = {};              // 首次拾取教学：每种蘑菇只弹一次横幅，熟手不打扰
+function mushroomBanner(kind, x) {
+  if (mushroomSeen[kind]) return;
+  mushroomSeen[kind] = true;
+  fxPush({ type: 'banner', txt: MUSH_BANNER[kind], col: '#ffe066', x, y: 150, vx: 0, vy: 0, t: 0, life: 2.4 });
+}
 /** 从被顶的砖里出货：金币直接弹飞计分，蘑菇/火之花生成为道具实体（缓缓升起） */
 function spawnFromBlock(content, tx, row) {
   if (content === 'coin') {
@@ -1204,7 +1233,7 @@ function spawnFromBlock(content, tx, row) {
   const kind = content === 'flower' ? 'flower'
              : (content === 'star' ? 'star'
              : (content === '1up' ? 'oneup'
-             : (player.mode === 'small' ? 'mushroom' : 'flower')));   // power：按形态出货
+             : (player.mode === 'small' ? rollPowerPool() : 'flower')));   // power：小形态→四色随机池，大形态→火之花
   items.push({
     kind, x: tx * TILE + 4, y: row * TILE + 6, w: 24, h: 24,
     vx: 0, vy: 0, onGround: false,
@@ -1237,10 +1266,23 @@ function itemCollect() {
     if (it.kind === 'mushroom') {
       if (player.mode === 'small') { setMode('big'); sfx('grow'); }
       addScore(PTS_POWER, it.x, it.y - 8);
+      mushroomBanner('mushroom', it.x);
     } else if (it.kind === 'oneup') {                 // 绿蘑菇 1UP
       lives = Math.min(99, lives + 1);
       fxPush({ type: 'text', x: it.x, y: it.y - 8, vy: -70, t: 0, life: 0.9, txt: '1UP', col: '#7ae048' });
       sfx('oneup');
+      mushroomBanner('oneup', it.x);
+    } else if (it.kind === 'coinshroom') {            // 金蘑菇：纯加分（不碰撞伤害，滑行同红蘑菇）
+      score += 2000;
+      fxPush({ type: 'text', x: it.x, y: it.y - 8, vy: -70, t: 0, life: 0.9, txt: '+2000', col: '#ffd23f' });
+      sfx('oneup');
+      mushroomBanner('coinshroom', it.x);
+    } else if (it.kind === 'poison') {                // 毒蘑菇：大→缩回小；小→只扣分不掉命（惩罚有底线）
+      if (player.mode !== 'small') shrinkToSmall();   // shrinkToSmall 自带缩小音 + 帽子飞走
+      else { score = Math.max(0, score - 200);
+             fxPush({ type: 'text', x: it.x, y: it.y - 8, vy: -70, t: 0, life: 0.9, txt: '-200', col: '#c8a0ff' });
+             sfx('shrink'); }
+      mushroomBanner('poison', it.x);
     } else if (it.kind === 'star') {                  // 无敌星：进入闪烁无敌状态
       player.starT = STAR_TIME;
       addScore(PTS_POWER, it.x, it.y - 8);
@@ -3523,6 +3565,8 @@ const KOOPA_RUN_R = [EK_SPR_R, makeSprite(KOOPA_RUN2, PAL_KOOPA_RED)];
 const ES_SPR_R = makeSprite(SHELL_MAP, PAL_KOOPA_RED);
 const MUSH_SPR = makeSprite(MUSH_MAP, { R: '#d82800', S: '#fc9838', W: '#fcfcfc' });
 const ONEUP_SPR = makeSprite(MUSH_MAP, { R: '#00a800', S: '#fc9838', W: '#fcfcfc' });   // 1UP：绿蘑菇
+const COINSHROOM_SPR = makeSprite(MUSH_MAP, { R: '#fc9838', S: '#fcfcfc', W: '#ffe870' });  // 金币蘑菇：金帽白茎
+const POISON_SPR = makeSprite(MUSH_MAP, { R: '#8858b8', S: '#c8a0ff', W: '#5a3a78' });      // 毒蘑菇：紫帽淡紫茎
 const FLW_SPRS = [makeSprite(FLW1, PAL_ITEM), makeSprite(FLW2, PAL_ITEM), makeSprite(FLW3, PAL_ITEM), makeSprite(FLW4, PAL_ITEM)];
 const STAR_SPRS = [makeSprite(STAR1, PAL_ITEM), makeSprite(STAR2, PAL_ITEM), makeSprite(STAR3, PAL_ITEM), makeSprite(STAR4, PAL_ITEM)];
 const COIN_SPRS = [makeSprite(COIN1, PAL_ITEM), makeSprite(COIN2, PAL_ITEM), makeSprite(COIN3, PAL_ITEM)];
@@ -3820,6 +3864,16 @@ function drawCastle() {
 
 function drawEffects() {
   for (const e of effects) {
+    if (e.type === 'banner') {                        // 首次拾取教学横幅：屏幕中上方固定，淡入淡出，不随镜头滚动
+      const a = Math.min(1, e.t / 0.2, (e.life - e.t) / 0.4);
+      ctx.globalAlpha = Math.max(0, a);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(e.txt, VIEW_W / 2 + 1, e.y + 1);
+      ctx.fillStyle = e.col || '#ffe066'; ctx.fillText(e.txt, VIEW_W / 2, e.y);
+      ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+      continue;
+    }
     const sx = Math.round(e.x - camX), sy = Math.round(e.y);
     if (e.type === 'coin') ctx.drawImage(coinFrames[Math.floor(coinT * 10) % 3], sx, sy);
     else if (e.type === 'frag') {
@@ -3848,6 +3902,8 @@ function drawItem(it) {
   if (it.kind === 'star') spr = STAR_SPRS[Math.floor(coinT * 8) % 4];         // 原版四色循环闪
   else if (it.kind === 'flower') spr = FLW_SPRS[Math.floor(coinT * 8) % 4];   // 火之花原版调色轮转
   else if (it.kind === 'oneup') spr = ONEUP_SPR;
+  else if (it.kind === 'coinshroom') spr = COINSHROOM_SPR;
+  else if (it.kind === 'poison') spr = POISON_SPR;
   else spr = MUSH_SPR;
   ctx.drawImage(spr, sx + Math.round((it.w - spr.width) / 2), sy + it.h - spr.height);   // 底部对齐居中
 }
@@ -4177,13 +4233,16 @@ const MANUAL_PAGES = [
   { h: `<h2><span class="tag">③</span>成 长 系 统</h2>
 <table>
 <tr><th style="width:26%">道具</th><th>效果</th><th>出处</th></tr>
-<tr><td class="k">超级蘑菇</td><td>小→大形态，可受击一次，受伤降级并有短暂无敌帧</td><td>?砖、隐藏砖</td></tr>
+<tr><td class="k">超级蘑菇 🔴</td><td>小→大形态，可受击一次，受伤降级并有短暂无敌帧</td><td>?砖、隐藏砖</td></tr>
 <tr><td class="k">火之花</td><td>获火球术：同屏最多 2 颗，弹地前进，撞墙熄灭</td><td>?砖</td></tr>
 <tr><td class="k">无敌星</td><td>限时无敌，碰到敌人直接击飞</td><td>特定普通砖</td></tr>
-<tr><td class="k">1UP蘑菇</td><td>生命 +1（上限 99）</td><td>隐藏砖</td></tr>
+<tr><td class="k">1UP蘑菇 🟢</td><td>生命 +1（上限 99）</td><td>隐藏砖 / 随机池</td></tr>
+<tr><td class="k">金币蘑菇 🟡</td><td>直接 +2000 分，无副作用</td><td>随机池</td></tr>
+<tr><td class="k">毒蘑菇 🟣</td><td>大/火力→缩回小；小形态只扣 200 分不掉命</td><td>随机池</td></tr>
 <tr><td class="k">金币</td><td>每枚 +200 分；<span class="gn">集满 100 枚换 1UP</span></td><td>地上 / 砖内 / 金币房</td></tr>
 <tr><td class="k">十三金币砖</td><td>连顶 10 次吐金币</td><td>1-1 / 1-2 各一块</td></tr>
-</table>` },
+</table>
+<p class="dim">🎲 小形态顶出「?砖成长位」时走<span class="hl">四色随机池</span>：红 60% / 绿 15% / 金 15% / 紫 10%——每种效果固定，见多了自然认识。大形态顶砖照旧出火之花。</p>` },
   { h: `<h2><span class="tag">④</span>敌 人 图 鉴</h2>
 <table>
 <tr><th style="width:24%">敌人</th><th>习性</th><th>应对</th></tr>
