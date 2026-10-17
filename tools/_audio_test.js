@@ -9,10 +9,11 @@ let ACTX = null;
 
 function P() {                         // AudioParam 桩：记录 setValueAtTime / ramp 的目标值
   return {
-    value: 0, _v0: null, _v1: null, _lin: false, _exp: false,
-    setValueAtTime(v) { this.value = v; this._v0 = v; },
-    linearRampToValueAtTime(v) { this._v1 = v; this._lin = true; },
-    exponentialRampToValueAtTime(v) { this._v1 = v; this._exp = true; },
+    value: 0, _v0: null, _v1: null, _lin: false, _exp: false, _set: [],
+    setValueAtTime(v) { this.value = v; this._v0 = v; this._set.push(v); },
+    linearRampToValueAtTime(v) { this._v1 = v; this._lin = true; this._set.push(v); },
+    exponentialRampToValueAtTime(v) { this._v1 = v; this._exp = true; this._set.push(v); },
+    cancelScheduledValues() {},
   };
 }
 function node(kind) { return { _kind: kind, _out: null, connect(d) { this._out = d; } }; }
@@ -33,6 +34,11 @@ function makeActx() {
     createGain() { const n = node('gain'); n.gain = P(); return n; },
     createBiquadFilter() { const n = node('filter'); n.type = 'lowpass'; n.frequency = P(); return n; },
     createDelay() { const n = node('delay'); n.delayTime = P(); return n; },
+    createDynamicsCompressor() {
+      const n = node('comp');
+      n.threshold = P(); n.knee = P(); n.ratio = P(); n.attack = P(); n.release = P();
+      return n;
+    },
     createBuffer(ch, len, sr) { const d = new Float32Array(len); return { length: len, sampleRate: sr, numberOfChannels: ch, getChannelData: () => d }; },
     createPeriodicWave(real, imag) { return { real, imag, duty: real[0] }; },   // 占空比藏在 real[0]
     createOscillator() {
@@ -94,9 +100,10 @@ try {
   const fn = new Function('document', 'window', 'localStorage', 'performance',
     'requestAnimationFrame', 'addEventListener', 'matchMedia', 'location',
     'devicePixelRatio', 'innerWidth', 'innerHeight', 'navigator', js + `
-  ;return { ensureAudio, get actx() { return actx; }, bgmTick, stinger, noiseHit, startLevel, update,
+  ;return { ensureAudio, get actx() { return actx; }, bgmTick, stinger, tone, noiseHit, sfx, SFX_DEF, startLevel, update,
             player: () => player, input: () => input, bossRoom: () => bossRoom,
             BGM_TRACKS: () => BGM_TRACKS, DRUM_KITS: () => DRUM_KITS,
+            get comp() { return compNode; }, get bgmGain() { return bgmGain; }, get sfxGain() { return sfxGain; },
             get track() { return bgmTrack; }, get gs() { return gameState; }, set gs(v) { gameState = v; },
             set audioOn(v) { audioOn = !!v; }, get world() { return world; } };`);
   const G = fn(documentStub, win, win.localStorage, win.performance, win.requestAnimationFrame,
@@ -106,6 +113,8 @@ try {
   G.startLevel(0); G.gs = 'play'; G.ensureAudio();
   const A = G.actx;
   check('AudioContext 已建（含白噪缓冲）', !!A && A.currentTime === 0);
+  check('主总线压缩器已挂接（阈值 -14dB / 4:1）', !!G.comp && G.comp.threshold.value === -14 && G.comp.ratio.value === 4);
+  check('BGM/SFX 分总线就位（SFX 收 0.35）', !!G.bgmGain && !!G.sfxGain && G.sfxGain.gain.value === 0.35);
 
   let allVoices = [];
   /** 以 50ms 为粒度推进虚拟时间并排音 */
@@ -132,8 +141,8 @@ try {
   check('BGM 用门控包络而非指数衰减（满音量硬切）',
         melVoices().length > 0 && melVoices().every(v => v.env === 'gate'));
 
-  // --- 1b. 第二脉冲和声：前半句独奏，后半句按调内三度进入 ---
-  voices = []; pump(4);
+  // --- 1b. 第二脉冲和声：前 8 小节独奏，后 8 小节（step≥128）按调内三度进入 ---
+  voices = []; pump(8);
   const hm = G.BGM_TRACKS().over.harmMap;
   const expHarm = hm.filter(e => e).slice(0, 6).map(e => Math.round(midi2f(e.n)));
   const gotHarm = harmVoices().slice(0, 6).map(v => Math.round(v.f0));
@@ -194,11 +203,27 @@ try {
   check('noiseHit 正常参数出声且滤波生效', voices.length === 1 && voices[0].kind === 'noise' && voices[0].ftype === 'highpass');
   voices = []; G.audioOn = false; pump(2); G.audioOn = true;
   check('静音时不排 BGM', voices.length === 0);
+  voices = []; G.tone(440, 440, 0.1, 'square', 0.1, 0);
+  check('SFX 单音走门控包络（非指数衰减）', voices.length === 1 && voices[0].env === 'gate');
+
+  // --- 5b. 标志性音效的姿态（水管三连 / Hurry 下行 / 死亡先扬后坠） ---
+  voices = []; G.sfx('pipe');
+  const pipeF = voices.filter(v => v.kind === 'osc').map(v => Math.round(v.f0));
+  check('水管音为三连下行（不再是单次长扫）', pipeF.length === 3 && pipeF[0] > pipeF[1] && pipeF[1] > pipeF[2]);
+  voices = []; G.sfx('hurry');
+  const hur = voices.filter(v => v.kind === 'osc');
+  check('Hurry 为下行四音、末音拉长', hur.length === 4 && hur[0].f0 > hur[3].f0 && hur[3].dur > hur[0].dur * 2);
+  voices = []; G.bgmGain.gain._set = []; G.sfx('death');
+  const dth = voices.filter(v => v.kind === 'osc');
+  check('死亡音先上行宣告、再下行坠落', dth.length === 14 &&
+        dth[0].f0 < dth[1].f0 && dth[1].f0 < dth[2].f0 && dth[3].f0 > dth[13].f0);
+  check('死亡音触发 BGM ducking', G.bgmGain.gain._set.includes(0.3));
 
   // --- 6. stinger 一次性动机 ---
-  voices = []; G.stinger('bossWin');
+  voices = []; G.bgmGain.gain._set = []; G.stinger('bossWin');
   const winNotes = voices.filter(v => v.kind === 'osc' && v.wave === 'square').map(v => Math.round(v.f0));
   check('击破 stinger：6 音琶音 + 长顶音 + 低音', winNotes.length === 7 && Math.max(...winNotes) >= Math.round(midi2f(83)));
+  check('大事件压低 BGM（ducking 到 0.3）', G.bgmGain.gain._set.includes(0.3));
   voices = []; G.stinger('bossLose');
   const loseNotes = voices.filter(v => v.kind === 'osc').map(v => v.f0);
   check('失败 stinger：半音下行且整体走低', loseNotes.length === 5 && loseNotes.slice(0, 4).every((f, i, a) => i === 0 || f < a[i - 1]));

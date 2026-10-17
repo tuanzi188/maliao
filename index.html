@@ -19,12 +19,13 @@
          安全区同步换轴：画面左=设备底（Home 条边）、画面上=设备左、画面右=设备顶（多数机型刘海边）→ 系统键避开刘海。 */
   #stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;}
   body.force-rot #stage{position:fixed;left:0;top:100vh;width:100vh;height:100vw;transform:rotate(-90deg);transform-origin:0 0;}
-  @supports (height:100dvh){ body.force-rot #stage{width:100dvh;height:100dvw;} }
+  @supports (height:100dvh){ body.force-rot #stage{top:100dvh;width:100dvh;height:100dvw;} }   /* top 也必须换 dvh，否则地址栏收起时整块画面会下移出屏 */
   body.force-rot #touch{position:absolute;}  /* fixed 后代在 transform 容器内以 stage 为包含块，这里显式写平 */
   body.force-rot #rotate{display:none !important;}   /* 画面已横向铺满，无需拦路提示转屏 */
   .tip{color:#9fb4d0;margin-top:12px;font-size:13px;letter-spacing:1px;user-select:none;text-align:center;}
   .tip .tch{display:none;}
   body.coarse .tip .kbd{display:none;} body.coarse .tip .tch{display:inline;}
+  .tip .rotonly{display:none;} body.force-rot .tip .rotonly{display:inline;}   /* “强制横屏”只在真的转了 90° 时提示 */
   /* 触屏虚拟按键（仅触屏设备显示，热区 ≥44px；底部避开刘海安全区）。
      视觉统一：方向键=箭头符号 / 动作键=单字汉字 / 系统键=符号，三组各自语义一致；深色底 + 白描边保证亮暗画面均可读 */
   #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:9;}
@@ -73,7 +74,9 @@
   user-select:none;-webkit-user-select:none;box-shadow:0 3px 8px rgba(0,0,0,.4);line-height:1;
   -webkit-tap-highlight-color:transparent;transition:transform .06s ease;}
 #manualBtn:active{transform:scale(.92);}
-body.force-rot #manualBtn{right:auto;left:calc(2px + env(safe-area-inset-bottom,0px));top:calc(8px + env(safe-area-inset-left,0px));}
+body.force-rot #manualBtn{right:auto;left:calc(50% - 23px);top:calc(8px + env(safe-area-inset-top,0px));}   /* 顶部居中：屏幕左上角归暂停键，别和它叠住 */
+/* 触屏真横屏：右上角已被暂停/全屏占住，说明键挪到「跑」右侧的按键带里，否则点下去只命中暂停 */
+body.lay-x:not(.force-rot) #manualBtn{right:auto;left:calc(80px + env(safe-area-inset-left,0px));top:calc(14px + env(safe-area-inset-top,0px));}
 #manual-overlay{position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;
   background:rgba(6,6,20,.78);}
 #manual{position:relative;width:min(820px,94vw);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;
@@ -124,7 +127,7 @@ body.force-rot #manualBtn{right:auto;left:calc(2px + env(safe-area-inset-bottom,
 <body>
 <div id="stage">
 <canvas id="game" width="960" height="544"></canvas>
-<div class="tip"><span class="kbd">A / D 移动 ｜ Shift 奔跑 ｜ 空格 / W 跳跃 ｜ S / ↓ 蹲下・入管 ｜ J / X 火球 ｜ M 音效 ｜ P 暂停 ｜ R 重开</span><span class="tch">画面已强制横屏：左手 ◀▶ ＋ 食指「跑」 ・ 右手 「跳」「火」</span></div>
+<div class="tip"><span class="kbd">A / D 移动 ｜ Shift 奔跑 ｜ 空格 / W 跳跃 ｜ S / ↓ 蹲下・入管 ｜ J / X 火球 ｜ M 音效 ｜ P 暂停 ｜ R 重开</span><span class="tch"><span class="rotonly">画面已强制横屏：</span>左手 ◀▶ ＋ 食指「跑」 ・ 右手 「跳」「火」</span></div>
 <div id="touch">
   <div class="tbtn" id="btnL">◀</div>
   <div class="tbtn" id="btnR">▶</div>
@@ -650,7 +653,9 @@ addEventListener('blur', () => {                   // 失焦防按键卡死 + �
 
 /* ---- 触屏虚拟按键（Pointer 事件统一鼠标/触摸；仅触屏设备或首次触摸后显示） ---- */
 const touchPanel = document.getElementById('touch');
+let coarseUI = false;                                // 触屏文案标记：drawHUD 每帧读，不反复碰 DOM
 function showTouch(){
+  coarseUI = true;
   if (touchPanel.style.display === 'block') return;
   touchPanel.style.display = 'block';
   document.body.classList.add('coarse');            // 触发控件带预留 + 触屏文案切换
@@ -670,19 +675,39 @@ function canCssRotate(){                          // 旋转兜底是否可用（
   try { return (typeof CSS === 'undefined') || !CSS.supports ? true : CSS.supports('transform', 'rotate(90deg)'); }
   catch (_) { return true; }
 }
-function fitStage(force){
-  if (force === undefined) force = document.body.classList.contains('force-rot');
-  if (!force) { cvs.style.width = cvs.style.height = ''; return; }   // 真横屏/桌面：交回原 CSS 双向约束公式
-  /* 轴向互换后 100vw/100vh 与画面局部轴不再对应，改按 #stage 实际盒子算 */
-  const boxW = stageEl.clientWidth || cvs.width, boxH = stageEl.clientHeight || cvs.height;
+/* 触摸按键带宽度（真横屏与强制横屏共用）：左带到 ▶ 右缘 = 2+64 + 10 + 64 = 140；
+   右带到全屏键左缘 = 58+48 = 106（跳 2+88、火 10+64、暂停 2+48 都不及它）。
+   安全区按轴再加宽。此前只有 force-rot 预留 band，真横屏直接按视口算，导致 667×375/720×360
+   这类短屏上按键压进画面 27~64px。 */
+const BAND_L = 140, BAND_R = 106;
+function fitStage(mode){
   const tipEl = document.querySelector('.tip');
+  if (!mode) {                                     // 桌面：交回 CSS 双向约束公式
+    cvs.style.width = cvs.style.height = '';
+    cvs.style.marginLeft = cvs.style.marginRight = '';
+    if (tipEl) tipEl.style.marginLeft = '';
+    return;
+  }
+  const cs = getComputedStyle(document.body);
+  const saL = parseFloat(cs.getPropertyValue('--saL')) || 0;
+  const saR = parseFloat(cs.getPropertyValue('--saR')) || 0;
+  const bandL = BAND_L + saL, bandR = BAND_R + saR;
+  /* 轴向互换后 100vw/100vh 与画面局部轴不再对应，改按 #stage 实际盒子算；
+     真横屏直接用视口尺寸（#stage 被 body 居中，盒子即视口） */
+  const boxW = mode === 'rot' ? (stageEl.clientWidth || cvs.width) : innerWidth;
+  const boxH = mode === 'rot' ? (stageEl.clientHeight || cvs.height) : innerHeight;
   const tipH = (tipEl && tipEl.offsetHeight) || 0;
-  const availH = Math.max(120, boxH - tipH - 24);                   // 24 = 画框上下边框 + 提示行间距
-  const band = Math.min(150, boxW * 0.22);    /* 两侧各留按键带深度：左带最深 140（▶ 76+64），右带 90（跳 2+88）
-                                                  取 150 留一点余量；再大会白丢画布面积（竖向本就吃紧） */
-  const w = Math.min(boxW - band * 2, availH * (cvs.width / cvs.height), cvs.width);
+  const availH = Math.max(120, boxH - tipH - 24);  // 24 = 画框上下边框 + 提示行间距
+  const ratio = cvs.width / cvs.height;
+  const border = cvs.offsetWidth - cvs.clientWidth; // 上下左右各 4px 黑边
+  const w = Math.max(160, Math.min(boxW - bandL - bandR - border, availH * ratio, cvs.width));
   cvs.style.width = w.toFixed(1) + 'px';
-  cvs.style.height = (w * cvs.height / cvs.width).toFixed(1) + 'px';
+  cvs.style.height = (w / ratio).toFixed(1) + 'px';
+  /* 两侧按键带不等宽（140 vs 106）：居中画布向右让半个差值，否则左带仍会压到画面 */
+  const shift = bandL - bandR;
+  cvs.style.marginLeft = shift + 'px';
+  cvs.style.marginRight = '0px';
+  if (tipEl) tipEl.style.marginLeft = shift + 'px';
 }
 function applyLayoutMode(){
   const touch = isTouchDevice();
@@ -690,8 +715,9 @@ function applyLayoutMode(){
   document.body.classList.toggle('coarse', touch);
   document.body.classList.toggle('lay-x', touch);                   // 触屏时画面必为横向（真/强制）→ 侧带布局
   document.body.classList.toggle('force-rot', force);
+  coarseUI = touch;
   if (touch) showTouch();
-  fitStage(force);
+  fitStage(touch ? (force ? 'rot' : 'land') : null);
   syncRotate();
 }
 addEventListener('resize', applyLayoutMode);
@@ -2421,6 +2447,7 @@ function update(dt) {
 
 /* ================== 7. 音效（WebAudio 振荡器 8-bit 占位，无音频文件） ================== */
 let audioOn = true, actx = null, masterGain = null;
+let bgmGain = null, sfxGain = null, compNode = null;   // BGM 分总线（可 duck）/ SFX 分总线 / 主压缩器
 try { audioOn = localStorage.getItem('pmario_mute') !== '1'; } catch (e) {}
 function ensureAudio() {
   if (!actx) {
@@ -2428,24 +2455,45 @@ function ensureAudio() {
       actx = new (window.AudioContext || window.webkitAudioContext)();
       masterGain = actx.createGain();                 // 主音量总线（M 总开关）
       masterGain.gain.value = audioOn ? 1 : 0;
-      masterGain.connect(actx.destination);
+      /* 主总线压缩器：Boss 击破/金币雨/音效叠加时软限幅——WebAudio 是线性求和，超 1.0 会硬削波 */
+      try {
+        compNode = actx.createDynamicsCompressor();
+        compNode.threshold.value = -14; compNode.knee.value = 10; compNode.ratio.value = 4;
+        compNode.attack.value = 0.003; compNode.release.value = 0.18;
+        masterGain.connect(compNode); compNode.connect(actx.destination);
+      } catch (e) { masterGain.connect(actx.destination); }   // 无压缩器的老浏览器：直连兜底
+      /* 分总线：BGM 可被大事件压低（ducking）；SFX 收 0.35——门控包络峰值更硬，比旧版衰减音更响 */
+      bgmGain = actx.createGain(); bgmGain.gain.value = 1; bgmGain.connect(masterGain);
+      sfxGain = actx.createGain(); sfxGain.gain.value = 0.35; sfxGain.connect(masterGain);
       makeNoise();                                    // 白噪缓冲随上下文一次性生成（鼓组共用）
       initAudioFx();                                 // 脉冲占空比波形 + 回声总线（上下文重建时同步重建）
     } catch (e) { actx = null; }
   }
   if (actx && actx.state === 'suspended') actx.resume();
 }
-/** 单音：f0→f1 滑音，dur 秒，指数衰减 */
-function tone(f0, f1, dur, type, vol, when) {
+/** 包络：gate=true 走 NES 式硬包络（1.5ms 起音 → 保持半程 → 线性收尾）；false 保留指数衰减 */
+function applyEnv(g, vol, t0, dur, gate) {
+  if (gate) {
+    const rel = Math.min(0.06, dur * 0.5);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.0015);
+    g.gain.setValueAtTime(vol, t0 + Math.max(0.002, dur - rel));
+    g.gain.linearRampToValueAtTime(0, t0 + dur);
+  } else {
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  }
+}
+/** 单音：f0→f1 滑音，dur 秒；默认门控包络，bus 缺省走 SFX 分总线 */
+function tone(f0, f1, dur, type, vol, when, gate = true, bus) {
   if (!masterGain) return;
   const t0 = actx.currentTime + (when || 0);
   const o = actx.createOscillator(), g = actx.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f0, t0);
   if (f1 !== f0) o.frequency.linearRampToValueAtTime(f1, t0 + dur);
-  g.gain.setValueAtTime(vol, t0);
-  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  o.connect(g); g.connect(masterGain);
+  applyEnv(g, vol, t0, dur, gate);
+  o.connect(g); g.connect(bus || sfxGain || masterGain);
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
 /* ---- NES 脉冲波（占空比）+ APU 回声总线：让干巴巴的方波有"FC 肉感" ---- */
@@ -2467,10 +2515,10 @@ function initAudioFx() {
   const fb = actx.createGain(); fb.gain.value = 0.3;
   const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
   echoSend.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay);   // 反馈回路
-  delay.connect(masterGain);                       // 湿信号直出（音量由 echoSend 输入量控制）
+  delay.connect(sfxGain || masterGain);            // 湿信号走 SFX 分总线（与干信号同电平）
 }
 /** 占空比脉冲音：duty='12'|'25'（其余回退方形波）；echo=true 时干信号同时送入回声总线 */
-function pulse(f0, f1, dur, duty, vol, when, echo) {
+function pulse(f0, f1, dur, duty, vol, when, echo, gate = true, bus) {
   if (!masterGain) return;
   const t0 = actx.currentTime + (when || 0);
   const o = actx.createOscillator(), g = actx.createGain();
@@ -2478,9 +2526,8 @@ function pulse(f0, f1, dur, duty, vol, when, echo) {
   if (wv) o.setPeriodicWave(wv); else o.type = 'square';
   o.frequency.setValueAtTime(f0, t0);
   if (f1 !== f0) o.frequency.linearRampToValueAtTime(f1, t0 + dur);
-  g.gain.setValueAtTime(vol, t0);
-  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  o.connect(g); g.connect(masterGain);             // 干信号
+  applyEnv(g, vol, t0, dur, gate);
+  o.connect(g); g.connect(bus || sfxGain || masterGain);   // 干信号
   if (echo && echoSend) o.connect(echoSend);       // 送入回声总线（尾音）
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
@@ -2497,8 +2544,18 @@ function chipNote(f, dur, duty, type, vol, when) {
   g.gain.linearRampToValueAtTime(vol, t0 + 0.002);
   g.gain.setValueAtTime(vol, t0 + Math.max(0.003, d - 0.004));
   g.gain.linearRampToValueAtTime(0, t0 + d);
-  o.connect(g); g.connect(masterGain);
+  o.connect(g); g.connect(bgmGain || masterGain);
   o.start(t0); o.stop(t0 + d + 0.02);
+}
+/** 大事件让路：BGM 分总线 30ms 压到 0.3，sec 秒后 150ms 恢复 */
+function duckBgm(sec) {
+  if (!bgmGain || !actx) return;
+  const g = bgmGain.gain, t = actx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(0.3, t + 0.03);
+  g.setValueAtTime(0.3, t + 0.03 + sec);
+  g.linearRampToValueAtTime(1, t + 0.03 + sec + 0.15);
 }
 /* ---- 噪声打击乐通道：8-bit 味道的 hi-hat / snare（白噪 + 滤波 + 极短包络） ---- */
 let NOISE_BUF = null;
@@ -2509,8 +2566,9 @@ function makeNoise() {
   const d = NOISE_BUF.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
 }
-/** dur 秒 / cutoff Hz / type 滤波类型 / vol 峰值：任一非法即静音返回（AudioParam 遇 NaN 会整条链路抛错） */
-function noiseHit(dur, cutoff, vol, when, type) {
+/** dur 秒 / cutoff Hz / type 滤波类型 / vol 峰值：任一非法即静音返回（AudioParam 遇 NaN 会整条链路抛错）
+    bus 缺省走 SFX 分总线；BGM 鼓组显式传 bgmGain 以便被 ducking 覆盖 */
+function noiseHit(dur, cutoff, vol, when, type, bus) {
   if (!masterGain || !NOISE_BUF) return;
   const d = +dur, f = +cutoff, v = +vol;
   if (!(isFinite(d) && isFinite(f) && isFinite(v)) || d <= 0 || v <= 0) return;
@@ -2519,12 +2577,12 @@ function noiseHit(dur, cutoff, vol, when, type) {
   s.buffer = NOISE_BUF; s.loop = true;
   bq.type = type || 'highpass'; bq.frequency.value = Math.min(20000, Math.max(40, f));
   g.gain.setValueAtTime(v, t0);
-  g.gain.exponentialRampToValueAtTime(0.001, t0 + d);
-  s.connect(bq); bq.connect(g); g.connect(masterGain);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + d);   // 打击乐保留衰减尾（鼓/碎砖靠它）
+  s.connect(bq); bq.connect(g); g.connect(bus || sfxGain || masterGain);
   s.start(t0); s.stop(t0 + d + 0.02);
 }
-/** 底鼓：正弦快速下扫（无噪声也有的低频冲击） */
-function kickHit(vol, when) { tone(150, 45, 0.09, 'sine', vol, when); }
+/** 底鼓：正弦快速下扫（无噪声也有的低频冲击）；bus 用于 BGM 鼓组走 bgmGain */
+function kickHit(vol, when, bus) { tone(150, 45, 0.09, 'sine', vol, when, true, bus); }
 const SFX_DEF = {
   jump:   () => pulse(260, 640, 0.16, '12', 0.13, 0),
   coin:   () => { pulse(988, 988, 0.07, '12', 0.14, 0, true); pulse(1319, 1319, 0.24, '12', 0.14, 0.07, true); },
@@ -2534,7 +2592,11 @@ const SFX_DEF = {
   kick:   () => pulse(500, 150, 0.10, '12', 0.15, 0, true),
   grow:   () => [262, 330, 392, 523, 660, 784].forEach((f, i) => pulse(f, f, 0.08, '25', 0.13, i * 0.05)),
   shrink: () => [1047, 784, 659, 523, 392].forEach((f, i) => pulse(f, f, 0.07, '25', 0.13, i * 0.05)),
-  death:  () => [494, 466, 440, 415, 392, 330, 262, 196].forEach((f, i) => tone(f, f, 0.12, 'square', 0.15, i * 0.11)),
+  death:  () => {                                    // 原版式"先上扬宣告、再坠落"，而不是一条直下坡
+    [392, 523, 659, 784].forEach((f, i) => pulse(f, f, 0.08, '25', 0.15, i * 0.075));
+    [740, 698, 659, 622, 587, 523, 466, 392, 330, 262].forEach((f, i) =>
+      pulse(f, f, i === 9 ? 0.30 : 0.10, '25', 0.15, 0.32 + i * 0.10));
+  },
   fire:   () => pulse(880, 220, 0.12, '12', 0.12, 0, true),
   sprout: () => tone(220, 660, 0.10, 'square', 0.12, 0),
   star:   () => [1319, 1568, 1976, 2637].forEach((f, i) => pulse(f, f, 0.07, '25', 0.13, i * 0.045, true)),
@@ -2543,14 +2605,20 @@ const SFX_DEF = {
   oneup:  () => [660, 880, 1100, 1320, 1560, 1760].forEach((f, i) => tone(f, f, 0.07, 'square', 0.12, i * 0.055)),
   pop:    () => { tone(1200, 160, 0.14, 'square', 0.12, 0); tone(500, 80, 0.12, 'triangle', 0.10, 0.02); },
   skid:   () => tone(210, 90, 0.22, 'sawtooth', 0.10, 0),
-  pipe:   () => tone(300, 90, 0.5, 'square', 0.14, 0),
-  hurry:  () => [880, 880, 880, 880].forEach((f, i) => tone(f, f, 0.08, 'square', 0.16, i * 0.13)),
+  pipe:   () => [[700, 500, 0], [540, 380, 0.09], [400, 260, 0.18]]     // 三连下行"嘟嘟嘟"（原版水管音的姿态）
+            .forEach(([a, b, t]) => pulse(a, b, 0.1, '25', 0.14, t)),
+  hurry:  () => [1047, 988, 880, 784].forEach((f, i) =>                  // 下行警报，末音拉长；不是四声同音哔
+            pulse(f, f, i === 3 ? 0.28 : 0.09, '25', 0.15, i * 0.1)),
   tap:    () => tone(1500, 900, 0.03, 'square', 0.05, 0),   // 触屏落键极轻点击声（无震动设备的手感补偿）
 };
+/* 大事件压低 BGM（秒）：旋律让路，stinger/死亡/通关才有落点 */
+const DUCK_SFX = { death: 1.15, win: 1.1, flag: 0.55, oneup: 0.3, pipe: 0.3, hurry: 0.35 };
 function sfx(name) {
   if (!audioOn) return;
   ensureAudio();
-  if (actx && SFX_DEF[name]) SFX_DEF[name]();
+  if (!actx || !SFX_DEF[name]) return;
+  if (DUCK_SFX[name]) duckBgm(DUCK_SFX[name]);
+  SFX_DEF[name]();
 }
 /** 跳跃音：基频随水平速度上移（原版跑跳音色区分） */
 function jumpSfx(vx) {
@@ -2566,10 +2634,12 @@ function stinger(name) {
   ensureAudio();
   if (!actx) return;
   if (name === 'bossWin') {                            // 大调上行琶音 + 长顶音：击破的落点感
+    duckBgm(1.2);                                      // 胜利动机让 BGM 先让路
     [60, 64, 67, 72, 76, 79].forEach((n, i) => tone(midi2f(n), midi2f(n), 0.11, 'square', 0.11, i * 0.085));
     tone(midi2f(84), midi2f(84), 0.55, 'square', 0.10, 6 * 0.085);
     tone(midi2f(48), midi2f(48), 0.6, 'triangle', 0.09, 6 * 0.085);
   } else if (name === 'bossLose') {                    // 半音下行 + 低音长音：失败的塌落感
+    duckBgm(0.9);
     [64, 63, 62, 61].forEach((n, i) => tone(midi2f(n), midi2f(n), 0.16, 'triangle', 0.11, i * 0.14));
     tone(midi2f(49), midi2f(45), 0.55, 'triangle', 0.10, 4 * 0.14);
   }
@@ -2608,19 +2678,35 @@ function thirdBelow(m) {
   while (deg < 0) { deg += 7; oct--; }
   return oct * 12 + DIATONIC[deg];
 }
-/* 地上主题：C 大调琶音主题（原创），8 小节＝128 个十六分步 */
+/* 地上主题：C 大调平台关主题（原创旋律，按原版句法组织），16 小节＝256 个十六分步。
+   A(1-8) 问答 → B(9-12) 转 Am/F 抬升 → A''(13-16) 回归收束；每两小节一个和弦。
+   句首同音三连（2+1+1）当节奏钩子、句间留白、第 1-4 小节整体模进——这三点比音高更决定"像不像"；
+   强拍落和弦音、弱拍走琶音/经过音，句尾落在主音或属音。 */
 const BGM_MELO = seq(`
-  72:2 76:2 79:2 76:2 81:2 79:2 76:2 72:2
-  74:2 77:2 81:2 77:2 79:2 76:2 72:2 0:2
-  72:2 76:2 79:2 76:2 81:2 84:2 81:2 79:2
-  77:2 81:2 79:2 77:2 74:2 72:2 69:2 0:2
-  71:2 74:2 77:2 74:2 79:2 77:2 74:2 71:2
-  72:2 76:2 79:2 76:2 81:2 79:2 76:2 74:2
-  72:2 74:2 76:2 77:2 79:2 81:2 83:2 84:2
-  88:2 84:2 83:2 81:2 79:2 76:2 74:2 71:2
+  67:2 67:1 67:1 0:2 69:2 72:4 0:4
+  74:2 72:2 69:4 67:4 64:4
+  74:2 74:1 74:1 0:2 76:2 79:4 0:4
+  81:2 79:2 76:4 74:4 71:4
+  72:1 74:1 76:2 79:4 76:2 72:2 74:4
+  76:2 79:2 81:4 79:2 76:2 72:4
+  72:1 74:1 76:2 79:4 81:2 79:2 76:4
+  74:2 71:2 72:8 67:4
+  69:2 72:2 76:4 74:2 72:2 69:4
+  72:2 76:2 81:4 79:2 76:2 72:4
+  77:2 81:2 79:4 77:2 74:2 72:4
+  69:2 72:2 77:4 76:2 74:2 72:4
+  67:2 71:2 74:4 76:2 74:2 71:4
+  74:2 76:2 79:4 81:2 79:2 74:4
+  72:2 76:2 79:4 81:2 79:2 76:4
+  77:2 76:2 74:2 72:2 72:8
 `);
-const BGM_BASS = seq(`36:4 0:4 43:4 0:4 41:4 0:4 45:4 0:4
-                      36:4 0:4 43:4 0:4 38:4 0:4 43:4 0:4`);
+/* 行走低音：每小节根音-五度-根音-五度，四分音符不断——原版低音的推进感来自这条线 */
+const BGM_BASS = seq(`
+  36:4 43:4 48:4 43:4  36:4 43:4 48:4 43:4  43:4 50:4 43:4 50:4  43:4 50:4 43:4 50:4
+  41:4 48:4 41:4 48:4  41:4 48:4 41:4 48:4  36:4 43:4 48:4 43:4  36:4 43:4 48:4 43:4
+  45:4 52:4 45:4 52:4  45:4 52:4 45:4 52:4  41:4 48:4 41:4 48:4  41:4 48:4 41:4 48:4
+  43:4 50:4 43:4 50:4  43:4 50:4 43:4 50:4  36:4 43:4 48:4 43:4  36:4 43:4 48:4 55:4
+`);
 /* 地下奖励房 BGM：低音区原创短循环 */
 const BGM_MELO_U = seq(`
   45:2 0:2 48:2 0:2 52:2 0:2 48:2 0:2
@@ -2670,7 +2756,7 @@ const DRUM_KITS = {
 /* 主题登记表：由 LEVELS[].music 与房间状态共同选曲（rate=时值放大倍数，越小越快）
    harm=[起,止] 是第二脉冲和声的十六分步区间：前半句独奏、后半句加厚，形成递进 */
 const BGM_TRACKS = {
-  over:  { mel: BGM_MELO,      bas: BGM_BASS,      kit: 'ground', rate: 1,    drum: 1,    harm: [64, 128],
+  over:  { mel: BGM_MELO,      bas: BGM_BASS,      kit: 'ground', rate: 1,    drum: 1,    harm: [128, 256],
            melVol: 0.034, harmVol: 0.018, basVol: 0.050 },
   under: { mel: BGM_MELO_U,    bas: BGM_BASS_U,    kit: 'sparse', rate: 1.06, drum: 0.7,  harm: [32, 64],
            melVol: 0.030, harmVol: 0.016, basVol: 0.048 },
@@ -2722,9 +2808,9 @@ function bgmTick() {
     if (bas) chipNote(midi2f(bas.n), bas.d * stepSec * 0.95, null, 'triangle', tr.basVol, when);   // 三角波低音
     if (kit) {                                        // 噪声通道：16 步一小节
       const st = s % 16;
-      if (kit.k && kit.k[st] === '1') kickHit(0.06 * drumVol, when);
-      if (kit.s && kit.s[st] === '1') { noiseHit(0.07, 1900, 0.04 * drumVol, when, 'bandpass'); tone(190, 150, 0.04, 'triangle', 0.03 * drumVol, when); }
-      if (kit.h[st] === '1') noiseHit(0.022, 7800, 0.020 * drumVol, when, 'highpass');
+      if (kit.k && kit.k[st] === '1') kickHit(0.06 * drumVol, when, bgmGain);
+      if (kit.s && kit.s[st] === '1') { noiseHit(0.07, 1900, 0.04 * drumVol, when, 'bandpass', bgmGain); tone(190, 150, 0.04, 'triangle', 0.03 * drumVol, when, true, bgmGain); }
+      if (kit.h[st] === '1') noiseHit(0.022, 7800, 0.020 * drumVol, when, 'highpass', bgmGain);
     }
     bgmStep = (s + 1) % tr.melMap.length;
     bgmNext += stepSec;
@@ -2748,16 +2834,28 @@ function visibleRange() {
 
 /* ============================ 9. 像素渲染 ============================ */
 const cvs = document.getElementById('game');
+/** 触点 → 画布内部像素：强制横屏时画布被 rotate(-90°)，屏幕轴和画布轴互换，
+    不能再用 getBoundingClientRect 的宽高比例直接换算（会把菜单命中矩形一起转 90°）。
+    以 #stage 的旋转后盒子反推：rotate(-90°) 下屏幕 x 对应局部 y、屏幕 y 对应局部 x。
+    顺带改用 content box（clientWidth/clientLeft），把 4px 黑边排除在外。 */
+function clientToGame(e){
+  const st = stageEl.getBoundingClientRect();
+  const rot = document.body.classList.contains('force-rot');
+  const lx = (rot ? st.bottom - e.clientY : e.clientX - st.left) - (cvs.offsetLeft + cvs.clientLeft);
+  const ly = (rot ? e.clientX - st.left : e.clientY - st.top) - (cvs.offsetTop + cvs.clientTop);
+  return { x: lx * VIEW_W / cvs.clientWidth, y: ly * VIEW_H / cvs.clientHeight };
+}
 cvs.addEventListener('pointerdown', e => {          // 标题界面：点击卡片选关/开始
   if (gameState !== 'title') return;
-  const r = cvs.getBoundingClientRect();
-  const x = (e.clientX - r.left) * VIEW_W / r.width, y = (e.clientY - r.top) * VIEW_H / r.height;
+  const p = clientToGame(e), x = p.x, y = p.y;
   const M = TITLE_MENU;
   const i = Math.floor((y - (M.y0 - 8)) / M.gap);
   if (i < 0 || i >= LEVELS.length || x < M.x0 - 12 || x > M.x0 + M.w + 12 || (y - (M.y0 - 8)) > M.h * LEVELS.length + (LEVELS.length - 1) * (M.gap - M.h) + 16) return;
   ensureAudio();
   if (levelLocked(i)) { sfx('bump'); return; }       // 未解锁：闷响拒绝
-  if (i === titleSel) startGame(); else { titleSel = i; sfx('coin'); }
+  /* 触屏没有“先选中再确认”的必要：点哪关直接进哪关；桌面保留一次选中、再次点击开始 */
+  if (i === titleSel || document.body.classList.contains('coarse')) { titleSel = i; startGame(); }
+  else { titleSel = i; sfx('coin'); }
 });
 const ctx = cvs.getContext('2d');
 ctx.imageSmoothingEnabled = false;                   // 像素风：禁用平滑
@@ -4123,6 +4221,7 @@ function shadowText(t, x, y, size, col) {
 }
 
 function drawHUD() {
+  const touchUI = coarseUI;   // 触屏：文案换成按键说法，别让手机上出现键盘说明
   ctx.textAlign = 'left';
   shadowText('SCORE', 14, 22, 12, '#cfe3ff');
   drawPixNum(score, 6, 14, 27, 2, '#ffffff');
@@ -4167,7 +4266,7 @@ function drawHUD() {
     shadowText('高度加成 +' + poleBonus + ' ・ 时间加成 +' + timeBonus + '（×50）', VIEW_W / 2, VIEW_H / 2 + 22, 18, '#9ff0a8');
     shadowText('得分 ' + score + ' ・ 金币 ' + coins + ' ・ 最高分 ' + hiScore,
                VIEW_W / 2, VIEW_H / 2 + 50, 18);
-    if (blink) shadowText('按 R / 点击【Ⅱ】返回标题', VIEW_W / 2, VIEW_H / 2 + 86, 16, '#9fb4d0');
+    if (blink) shadowText(touchUI ? '点击【Ⅱ】返回标题' : '按 R / 点击【Ⅱ】返回标题', VIEW_W / 2, VIEW_H / 2 + 86, 16, '#9fb4d0');
     ctx.textAlign = 'left';
   } else if (gameState === 'gameover') {
     ctx.fillStyle = 'rgba(10,10,30,.72)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -4175,7 +4274,7 @@ function drawHUD() {
     shadowText('GAME OVER', VIEW_W / 2, VIEW_H / 2 - 30, 52, '#ff5a5a');
     shadowText('得分 ' + score + ' ・ 金币 ' + coins + ' ・ 最高分 ' + hiScore,
                VIEW_W / 2, VIEW_H / 2 + 14, 20);
-    if (blink) shadowText('点击屏幕 / 按 R 重开', VIEW_W / 2, VIEW_H / 2 + 50, 16, '#9fb4d0');
+    if (touchUI || blink) shadowText(touchUI ? '点击屏幕重开' : '点击屏幕 / 按 R 重开', VIEW_W / 2, VIEW_H / 2 + 50, 16, '#9fb4d0');   // 触屏常显：这是唯一的重开入口
     ctx.textAlign = 'left';
   } else if (gameState === 'title') {
     ctx.fillStyle = 'rgba(10,10,30,.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -4214,14 +4313,15 @@ function drawHUD() {
       }
     }
     ctx.textAlign = 'center';
-    if (blink) shadowText('↑↓ 选关 ・ 空格/回车 开始（或点击关卡）', VIEW_W / 2, M.y0 - 8 + stripH + 22, 17, '#ffffff');
-    shadowText('A/D 移动 ・ Shift 跑 ・ S/↓ 蹲・入管 ・ J/X 火球 ・ M 静音', VIEW_W / 2, M.y0 - 8 + stripH + 46, 14, '#9fb4d0');
+    if (blink) shadowText(touchUI ? '点击关卡开始' : '↑↓ 选关 ・ 空格/回车 开始（或点击关卡）', VIEW_W / 2, M.y0 - 8 + stripH + 22, 17, '#ffffff');
+    shadowText(touchUI ? '方向键可滑动换键 ・ 双指可同时按住「跑」+「跳」'
+                       : 'A/D 移动 ・ Shift 跑 ・ S/↓ 蹲・入管 ・ J/X 火球 ・ M 静音', VIEW_W / 2, M.y0 - 8 + stripH + 46, 14, '#9fb4d0');
     ctx.textAlign = 'left';
   } else if (gameState === 'pause') {
     ctx.fillStyle = 'rgba(10,10,30,.6)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.textAlign = 'center';
     shadowText('已暂停', VIEW_W / 2, VIEW_H / 2 - 20, 40, '#ffffff');
-    shadowText('P / Esc 继续 ・ R 重开 ・ M ' + (audioOn ? '静音' : '取消静音'),
+    shadowText(touchUI ? '点击【Ⅱ】继续' : 'P / Esc 继续 ・ R 重开 ・ M ' + (audioOn ? '静音' : '取消静音'),
                VIEW_W / 2, VIEW_H / 2 + 24, 16, '#cfe3ff');
     ctx.textAlign = 'left';
   }
