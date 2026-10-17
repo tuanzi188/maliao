@@ -758,6 +758,13 @@ function keyOff(id) {
   const el = document.getElementById(id); if (el) el.classList.remove('on');
   const h = HOLD_KEYS[id]; if (h) h.up();
 }
+/** 清空所有按住输入：死亡/重生/重开时调用，防止手指未抬起导致复活后继续自动移动 */
+function clearHeldInputs() {
+  for (const id of [...heldKeys]) keyOff(id);
+  ptrKey.clear();
+  input.left = input.right = input.down = input.run = input.jump = false;
+  input.jumpQueued = 0;
+}
 function holdIdAt(x, y) {
   const el = document.elementFromPoint(x, y);
   return (el && el.classList && el.classList.contains('tbtn') && HOLD_KEYS[el.id]) ? el.id : null;
@@ -767,6 +774,7 @@ touchPanel.addEventListener('pointerdown', e => {
   if (!HOLD_KEYS[id]) return;                        // 点击型按键交给各自的监听器
   e.preventDefault(); ensureAudio();
   if (gameState === 'title') { startGame(); return; }
+  if (gameState !== 'play') return;                  // 死亡/暂停/结算态不接收按住键，防复活后残留方向
   ptrKey.set(e.pointerId, id); keyOn(id);
 });
 addEventListener('pointermove', e => {               // 滑移：按住的手指滑到另一枚按住键 → 换键（滑到空处保持，符合实体键语义）
@@ -784,6 +792,15 @@ function ptrRelease(e) {
 addEventListener('pointerup', ptrRelease);
 addEventListener('pointercancel', ptrRelease);
 addEventListener('blur', () => { for (const id of [...heldKeys]) keyOff(id); ptrKey.clear(); });
+/* 移动端 GAME OVER 兜底：点画面任意处重开；Ⅱ / 全屏 / 说明按钮仍走自己的监听器 */
+addEventListener('pointerdown', e => {
+  if (gameState !== 'gameover') return;
+  const t = e.target;
+  if (t && t.closest && t.closest('#btnP, #btnX, #manualBtn')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  resetGame();
+}, true);
 document.getElementById('btnP').addEventListener('pointerdown', e => {
   e.preventDefault(); ensureAudio();
   if (gameState === 'title') startGame();
@@ -820,6 +837,7 @@ let checkpoint = { x: SPAWN.x, y: SPAWN.y };        // 重生点：向右推进�
 function respawn() {
   player.x = SPAWN.x; player.y = SPAWN.y;
   player.vx = 0; player.vy = 0; player.cutDone = true; player.coyote = 0; player.stuckT = 0;
+  clearHeldInputs();
   respawnCount++;
 }
 /** 死亡后重生：回到重生点（checkpoint），形态重置为小 */
@@ -832,6 +850,7 @@ function respawnToCheckpoint() {
   player.vx = 0; player.vy = 0; player.cutDone = true; player.coyote = 0; player.stuckT = 0;
   player.mode = 'small'; player.w = PLAYER_W; player.h = PLAYER_H; player.starT = 0;
   player.invulnT = INVULN_T;                          // 复活无敌帧：防重生点贴脸敌人秒杀
+  clearHeldInputs();                                  // 复活时清空按住输入：防手指未抬起继续往坑里跑
   respawnCount++;
   /* 全局倒计时：死亡不重置，从死亡时刻继续走；归零后的死亡直接 Game Over（见 updateDying） */
   /* 清场：把徘徊在重生点周围的敌人掀飞（不计分），杜绝“复活→被撞→再死”死循环 */
@@ -1596,6 +1615,7 @@ function die(pitFall) {
   gameState = 'dying'; deathT = 0; deathByPit = !!pitFall;
   player.vy = pitFall ? -300 : -760;   // 摔坑时人已在屏外，小跳只为动画一致
   player.vx = 0;
+  clearHeldInputs();                   // 死亡瞬间松开所有按住键，防复活后自动移动
   sfx('death');
 }
 function updateDying(dt) {
@@ -2464,6 +2484,22 @@ function pulse(f0, f1, dur, duty, vol, when, echo) {
   if (echo && echoSend) o.connect(echoSend);       // 送入回声总线（尾音）
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
+/** 门控音（BGM 专用）：满音量保持到音尾再硬切，模拟 NES 无衰减包络；起音/收尾各留 2ms 防爆音 */
+function chipNote(f, dur, duty, type, vol, when) {
+  if (!masterGain) return;
+  const t0 = actx.currentTime + (when || 0);
+  const d = Math.max(0.02, dur);
+  const o = actx.createOscillator(), g = actx.createGain();
+  const wv = duty === '12' ? PULSE_WAVE.w12 : (duty === '25' ? PULSE_WAVE.w25 : null);
+  if (wv) o.setPeriodicWave(wv); else o.type = type || 'square';
+  o.frequency.setValueAtTime(f, t0);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.002);
+  g.gain.setValueAtTime(vol, t0 + Math.max(0.003, d - 0.004));
+  g.gain.linearRampToValueAtTime(0, t0 + d);
+  o.connect(g); g.connect(masterGain);
+  o.start(t0); o.stop(t0 + d + 0.02);
+}
 /* ---- 噪声打击乐通道：8-bit 味道的 hi-hat / snare（白噪 + 滤波 + 极短包络） ---- */
 let NOISE_BUF = null;
 function makeNoise() {
@@ -2539,58 +2575,124 @@ function stinger(name) {
   }
 }
 
-/* ---- 8-bit 背景音乐：原创循环小曲（音量压低垫在音效下），随 play 状态自动起停 ---- */
-const BGM_BPM = 140, BGM_EIGHTH = 60 / BGM_BPM / 2;   // 八分音符时值（秒）
+/* ---- 8-bit 背景音乐：致敬 NES 四通道编曲（双脉冲 + 三角波 + 噪声），旋律仍为原创 ----
+   编曲手法对齐原版：快板 16 分网格、第二脉冲和声、满音量硬切包络、三角波低音、
+   噪声通道只做轻沙锤（地上曲不堆底鼓/军鼓），但旋律不抄原曲，规避版权风险。 */
+const BGM_BPM = 190, BGM_STEP = 60 / BGM_BPM / 4;   // 十六分音符时值（秒）
 const midi2f = n => 440 * Math.pow(2, (n - 69) / 12);
-const BGM_MELO = [   // MIDI 音高，0 = 休止；四段主题各 16 个八分音符循环
-  72,76,79,76, 81,79,76,72, 74,77,81,77, 79,76,72,0,
-  72,76,79,76, 81,84,81,79, 77,81,79,77, 74,72,69,0,
-  71,74,77,74, 79,77,74,71, 72,76,79,76, 81,79,76,74,
-  72,74,76,77, 79,81,83,84, 88,84,83,81, 79,76,74,71,
-];
-const BGM_BASS = [36,0,43,0, 41,0,45,0, 36,0,43,0, 38,0,43,0];   // 每两个八分音符一个低音
+/* 记谱：空白分隔的 "音高:时值"，时值单位＝十六分步；音高 0 为休止（省略时值默认 2 步） */
+function seq(str) {
+  return str.trim().split(/\s+/).map(t => {
+    const [n, d] = t.split(':');
+    return { n: +n, d: +d || 2 };
+  });
+}
+/* 起点事件 → 逐十六分步查表：长音只占起点，其余步留 null */
+function buildStepMap(events) {
+  const len = events.reduce((s, e) => s + e.d, 0);
+  const map = new Array(len).fill(null);
+  let p = 0;
+  for (const e of events) {
+    if (p >= len) break;
+    if (e.n) map[p] = { n: e.n, d: Math.min(e.d, len - p) };
+    p += e.d;
+  }
+  return map;
+}
+/* 调内下行三度（C 大调／A 小调共用同一音阶）；非自然音退回小三度 */
+const DIATONIC = [0, 2, 4, 5, 7, 9, 11];
+function thirdBelow(m) {
+  const i = DIATONIC.indexOf(((m % 12) + 12) % 12);
+  if (i < 0) return m - 3;
+  let deg = i - 2, oct = Math.floor(m / 12);
+  while (deg < 0) { deg += 7; oct--; }
+  return oct * 12 + DIATONIC[deg];
+}
+/* 地上主题：C 大调琶音主题（原创），8 小节＝128 个十六分步 */
+const BGM_MELO = seq(`
+  72:2 76:2 79:2 76:2 81:2 79:2 76:2 72:2
+  74:2 77:2 81:2 77:2 79:2 76:2 72:2 0:2
+  72:2 76:2 79:2 76:2 81:2 84:2 81:2 79:2
+  77:2 81:2 79:2 77:2 74:2 72:2 69:2 0:2
+  71:2 74:2 77:2 74:2 79:2 77:2 74:2 71:2
+  72:2 76:2 79:2 76:2 81:2 79:2 76:2 74:2
+  72:2 74:2 76:2 77:2 79:2 81:2 83:2 84:2
+  88:2 84:2 83:2 81:2 79:2 76:2 74:2 71:2
+`);
+const BGM_BASS = seq(`36:4 0:4 43:4 0:4 41:4 0:4 45:4 0:4
+                      36:4 0:4 43:4 0:4 38:4 0:4 43:4 0:4`);
 /* 地下奖励房 BGM：低音区原创短循环 */
-const BGM_MELO_U = [45,0,48,0, 52,0,48,0, 50,0,48,0, 45,0,43,0,
-                    41,0,45,0, 48,0,52,0, 55,0,53,0, 50,0,48,0];
-const BGM_BASS_U = [33,0,40,0, 33,0,38,0];
+const BGM_MELO_U = seq(`
+  45:2 0:2 48:2 0:2 52:2 0:2 48:2 0:2
+  50:2 0:2 48:2 0:2 45:2 0:2 43:2 0:2
+  41:2 0:2 45:2 0:2 48:2 0:2 52:2 0:2
+  55:2 0:2 53:2 0:2 50:2 0:2 48:2 0:2
+`);
+const BGM_BASS_U = seq(`33:4 0:4 40:4 0:4 33:4 0:4 38:4 0:4`);
 /* Boss 战 BGM：A 小调，A 段快速追逐 + B 段半音狂暴；方波主旋律 + 三角波低音，音量稍大 */
-const BGM_MELO_BOSS = [
-  // A 段：追逐（4 小节，32 个八分音符）——A 小调重复跳进，压迫感
-  69,0,69,72, 74,0,72,69, 67,0,67,70, 72,0,70,67,
-  65,0,65,68, 69,0,68,65, 64,0,67,69, 72,0,71,69,
-  // B 段：狂暴（4 小节，32 个八分音符）——半音阶上爬+下爬，不和谐紧张
-  69,70,71,72, 73,74,75,76, 77,76,75,74, 73,72,71,69,
-  68,69,70,71, 72,73,74,75, 76,75,74,73, 72,71,69,67,
-];
-const BGM_BASS_BOSS = [
-  // A 段低音（16 个，每两个八分音符一个）——A2-G2-F2-F#2 下行进行
-  45,0,45,0, 43,0,43,0, 41,0,41,0, 40,0,40,0,
-  45,0,45,0, 43,0,43,0, 41,0,43,0, 45,0,45,0,
-  // B 段低音（16 个）——半音上行，与旋律狂暴段呼应
-  45,0,46,0, 47,0,48,0, 49,0,48,0, 47,0,46,0,
-  45,0,46,0, 47,0,48,0, 49,0,50,0, 52,0,50,0,
-];
-/* 1-3 高空关主题曲：E5~D6 高音区、四五度宽跳、大量休止，rate 1.18（≈119BPM）把节奏拖慢换浮空感 */
-const BGM_MELO_SKY = [
-  76,0,0,83, 81,0,79,0, 76,0,0,83, 86,0,84,0,
-  81,0,0,76, 79,0,81,0, 84,0,83,0, 81,79,76,0,
-];
-const BGM_BASS_SKY = [40,0,0,0, 45,0,0,0, 43,0,0,0, 38,0,0,0];   // 每两拍一个根音，空旷
-/* 鼓组 pattern：16 个八分步（bgmIdx % 16），k=底鼓 s=军鼓 h=踩镲 */
+const BGM_MELO_BOSS = seq(`
+  69:2 0:2 69:2 72:2 74:2 0:2 72:2 69:2
+  67:2 0:2 67:2 70:2 72:2 0:2 70:2 67:2
+  65:2 0:2 65:2 68:2 69:2 0:2 68:2 65:2
+  64:2 0:2 67:2 69:2 72:2 0:2 71:2 69:2
+  69:2 70:2 71:2 72:2 73:2 74:2 75:2 76:2
+  77:2 76:2 75:2 74:2 73:2 72:2 71:2 69:2
+  68:2 69:2 70:2 71:2 72:2 73:2 74:2 75:2
+  76:2 75:2 74:2 73:2 72:2 71:2 69:2 67:2
+`);
+const BGM_BASS_BOSS = seq(`
+  45:2 0:2 45:2 0:2 43:2 0:2 43:2 0:2
+  41:2 0:2 41:2 0:2 40:2 0:2 40:2 0:2
+  45:2 0:2 45:2 0:2 43:2 0:2 43:2 0:2
+  41:2 0:2 43:2 0:2 45:2 0:2 45:2 0:2
+  45:2 0:2 46:2 0:2 47:2 0:2 48:2 0:2
+  49:2 0:2 48:2 0:2 47:2 0:2 46:2 0:2
+  45:2 0:2 46:2 0:2 47:2 0:2 48:2 0:2
+  49:2 0:2 50:2 0:2 52:2 0:2 50:2 0:2
+`);
+/* 1-3 高空关主题曲：E5~D6 高音区、四五度宽跳、大量休止，rate 1.18（≈161BPM）拖慢换浮空感 */
+const BGM_MELO_SKY = seq(`
+  76:2 0:2 0:2 83:2 81:2 0:2 79:2 0:2
+  76:2 0:2 0:2 83:2 86:2 0:2 84:2 0:2
+  81:2 0:2 0:2 76:2 79:2 0:2 81:2 0:2
+  84:2 0:2 83:2 0:2 81:2 79:2 76:2 0:2
+`);
+const BGM_BASS_SKY = seq(`40:4 0:4 0:4 0:4 45:4 0:4 0:4 0:4
+                          43:4 0:4 0:4 0:4 38:4 0:4 0:4 0:4`);
+/* 鼓组 pattern：16 个十六分步（一小节），k=底鼓 s=军鼓 h=踩镲。
+   地上/地下/高空只留噪声踩镲——底鼓交给三角波低音，这是 NES 原版的配器纪律。 */
 const DRUM_KITS = {
-  rock:   { k: '1000000010000000', s: '0000100000001000', h: '1010101010101010' },   // 地上：经典推进
-  sparse: { k: '1000000000000000', s: '0000000000000000', h: '0000100000001000' },   // 地下：只留空拍与闭镲
-  airy:   { k: '1000000000000000', s: '0000000000000000', h: '0010000000100000' },   // 高空：稀疏点缀
-  drive:  { k: '1000100010001000', s: '0000100000001000', h: '1111111111111111' },   // Boss：四分底鼓 + 八分密镲
+  ground: { h: '0010001000100010' },                                   // 地上：反拍轻扫
+  sparse: { h: '0000100000001000' },                                   // 地下：两下闭镲
+  airy:   { h: '0000001000000010' },                                   // 高空：更空
+  drive:  { k: '1000000010000000', s: '0000100000001000', h: '1010101010101010' }, // Boss：保留驱动
 };
-/* 主题登记表：由 LEVELS[].music 与房间状态共同选曲（rate=时值放大倍数，越小越快） */
+/* 主题登记表：由 LEVELS[].music 与房间状态共同选曲（rate=时值放大倍数，越小越快）
+   harm=[起,止] 是第二脉冲和声的十六分步区间：前半句独奏、后半句加厚，形成递进 */
 const BGM_TRACKS = {
-  over:  { mel: BGM_MELO,      bas: BGM_BASS,      kit: 'rock',   rate: 1,    drum: 1 },
-  under: { mel: BGM_MELO_U,    bas: BGM_BASS_U,    kit: 'sparse', rate: 1.06, drum: 0.7 },
-  sky:   { mel: BGM_MELO_SKY,  bas: BGM_BASS_SKY,  kit: 'airy',   rate: 1.18, drum: 0.75 },
-  boss:  { mel: BGM_MELO_BOSS, bas: BGM_BASS_BOSS, kit: 'drive',  rate: 1,    drum: 1.15 },
+  over:  { mel: BGM_MELO,      bas: BGM_BASS,      kit: 'ground', rate: 1,    drum: 1,    harm: [64, 128],
+           melVol: 0.034, harmVol: 0.018, basVol: 0.050 },
+  under: { mel: BGM_MELO_U,    bas: BGM_BASS_U,    kit: 'sparse', rate: 1.06, drum: 0.7,  harm: [32, 64],
+           melVol: 0.030, harmVol: 0.016, basVol: 0.048 },
+  sky:   { mel: BGM_MELO_SKY,  bas: BGM_BASS_SKY,  kit: 'airy',   rate: 1.18, drum: 0.75, harm: [32, 64],
+           melVol: 0.030, harmVol: 0.016, basVol: 0.046 },
+  boss:  { mel: BGM_MELO_BOSS, bas: BGM_BASS_BOSS, kit: 'drive',  rate: 1,    drum: 1.15, harm: [0, 128],
+           melVol: 0.038, harmVol: 0.020, basVol: 0.058 },
 };
-let bgmIdx = 0, bgmNext = 0, bgmTrack = '';
+/* 首次取用时把记谱展开成逐十六分步查表（和声由旋律按调内三度生成） */
+function prepTrack(tr) {
+  if (tr.melMap) return tr;
+  tr.melMap = buildStepMap(tr.mel);
+  tr.basMap = buildStepMap(tr.bas);
+  tr.harmMap = new Array(tr.melMap.length).fill(null);
+  const [from, to] = tr.harm || [0, 0];
+  for (let s = from; s < Math.min(to, tr.melMap.length); s++) {
+    const e = tr.melMap[s];
+    if (e) tr.harmMap[s] = { n: thirdBelow(e.n), d: e.d };
+  }
+  return tr;
+}
+let bgmStep = 0, bgmNext = 0, bgmTrack = '';
 function bgmTick() {
   const playing = gameState === 'play' || gameState === 'pipeIn' || gameState === 'pipeOut';
   if (!actx || !masterGain || !audioOn || !playing) return;
@@ -2602,31 +2704,30 @@ function bgmTick() {
   /* 选曲：Boss 战 > 奖励房内 > 关卡自带 theme（1-2 地下 / 1-3 高空），缺省地上主题曲 */
   const trName = bossFight ? 'boss' : (under ? 'under'
                  : (cur.music || (cur.theme === 'under' ? 'under' : 'over')));
-  const tr = BGM_TRACKS[trName] || BGM_TRACKS.over;
-  if (trName !== bgmTrack) { bgmTrack = trName; bgmIdx = 0; }           // 换曲从头起小节，避免半句切入
-  const mel = tr.mel, bas = tr.bas, kit = DRUM_KITS[tr.kit], drumVol = tr.drum;
-  /* 速度：无敌星/Hurry-up 沿用原版；Boss 战整体稍快（0.92≈152BPM），阶段3狂暴再加速（0.85≈165BPM） */
+  const tr = prepTrack(BGM_TRACKS[trName] || BGM_TRACKS.over);
+  if (trName !== bgmTrack) { bgmTrack = trName; bgmStep = 0; }          // 换曲从头起小节，避免半句切入
+  const kit = DRUM_KITS[tr.kit], drumVol = tr.drum;
+  /* 速度：无敌星/Hurry-up 沿用原版；Boss 战整体稍快（0.92≈175BPM），阶段3狂暴再加速（0.85≈161BPM） */
   const bossRage = bossFight && bossRoom.boss && bossRoom.boss.phase >= 3;
   const spd = player.starT > 0 ? 0.55 : hurry ? 0.72 : (bossRage ? 0.85 : (bossFight ? 0.92 : 1));
-  const eighth = BGM_EIGHTH * tr.rate * spd;
-  /* Boss 战音量稍大，增加压迫感 */
-  const melVol = bossFight ? 0.05 : (under ? 0.038 : 0.042);
-  const basVol = bossFight ? 0.065 : 0.055;
+  const stepSec = BGM_STEP * tr.rate * spd;
   while (bgmNext < actx.currentTime + 0.4) {                            // 前瞻 0.4s 排音
     const when = bgmNext - actx.currentTime;
-    const m = mel[bgmIdx % mel.length];
-    if (m) pulse(midi2f(m), midi2f(m), eighth * 0.85, '12', melVol, when);   // 主旋律：12.5% 脉冲波（NES 味）
-    if (bgmIdx % 2 === 0) {
-      const b = bas[(bgmIdx >> 1) % bas.length];
-      if (b) tone(midi2f(b), midi2f(b), eighth * 1.7, 'triangle', basVol, when);
+    const s = bgmStep;
+    const mel = tr.melMap[s % tr.melMap.length];
+    if (mel) chipNote(midi2f(mel.n), mel.d * stepSec * 0.92, '12', 'square', tr.melVol, when);   // 主旋律：12.5% 脉冲
+    const harm = tr.harmMap[s % tr.harmMap.length];
+    if (harm) chipNote(midi2f(harm.n), harm.d * stepSec * 0.92, '25', 'square', tr.harmVol, when); // 第二脉冲：和声
+    const bas = tr.basMap[s % tr.basMap.length];
+    if (bas) chipNote(midi2f(bas.n), bas.d * stepSec * 0.95, null, 'triangle', tr.basVol, when);   // 三角波低音
+    if (kit) {                                        // 噪声通道：16 步一小节
+      const st = s % 16;
+      if (kit.k && kit.k[st] === '1') kickHit(0.06 * drumVol, when);
+      if (kit.s && kit.s[st] === '1') { noiseHit(0.07, 1900, 0.04 * drumVol, when, 'bandpass'); tone(190, 150, 0.04, 'triangle', 0.03 * drumVol, when); }
+      if (kit.h[st] === '1') noiseHit(0.022, 7800, 0.020 * drumVol, when, 'highpass');
     }
-    if (kit) {                                        // 鼓组：16 个八分步一轮
-      const st = bgmIdx % 16;
-      if (kit.k[st] === '1') kickHit(0.07 * drumVol, when);
-      if (kit.s[st] === '1') { noiseHit(0.09, 1900, 0.05 * drumVol, when, 'bandpass'); tone(190, 150, 0.05, 'triangle', 0.035 * drumVol, when); }
-      if (kit.h[st] === '1') noiseHit(0.028, 7600, 0.026 * drumVol, when, 'highpass');
-    }
-    bgmIdx++; bgmNext += eighth;
+    bgmStep = (s + 1) % tr.melMap.length;
+    bgmNext += stepSec;
   }
 }
 
@@ -4074,7 +4175,7 @@ function drawHUD() {
     shadowText('GAME OVER', VIEW_W / 2, VIEW_H / 2 - 30, 52, '#ff5a5a');
     shadowText('得分 ' + score + ' ・ 金币 ' + coins + ' ・ 最高分 ' + hiScore,
                VIEW_W / 2, VIEW_H / 2 + 14, 20);
-    if (blink) shadowText('按 R / 点击【Ⅱ】重开', VIEW_W / 2, VIEW_H / 2 + 50, 16, '#9fb4d0');
+    if (blink) shadowText('点击屏幕 / 按 R 重开', VIEW_W / 2, VIEW_H / 2 + 50, 16, '#9fb4d0');
     ctx.textAlign = 'left';
   } else if (gameState === 'title') {
     ctx.fillStyle = 'rgba(10,10,30,.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -4199,7 +4300,7 @@ window.__ENGINE = {
   settleRoomCoins, roomCoin, spawnCoinRain, updateBossRoom,
   /* ---- 音频（自动化测试入口：可驱动排音并检查实际落到 AudioParam 的数值） ---- */
   bgmTick, stinger, noiseHit, kickHit, tone, BGM_TRACKS, DRUM_KITS,
-  get bgmTrack() { return bgmTrack; }, get bgmIdx() { return bgmIdx; },
+  get bgmTrack() { return bgmTrack; }, get bgmStep() { return bgmStep; },
   get curMusic() { return cur.music || (cur.theme === 'under' ? 'under' : 'over'); },
   set audioOn(v) { audioOn = !!v; if (masterGain) masterGain.gain.value = audioOn ? 1 : 0; },
   /* ---- 布局（自动化入口：改视口后同步重算，再读 body.class 判定姿态分支） ---- */

@@ -9,10 +9,10 @@ let ACTX = null;
 
 function P() {                         // AudioParam 桩：记录 setValueAtTime / ramp 的目标值
   return {
-    value: 0, _v0: null, _v1: null,
+    value: 0, _v0: null, _v1: null, _lin: false, _exp: false,
     setValueAtTime(v) { this.value = v; this._v0 = v; },
-    linearRampToValueAtTime(v) { this._v1 = v; },
-    exponentialRampToValueAtTime(v) { this._v1 = v; },
+    linearRampToValueAtTime(v) { this._v1 = v; this._lin = true; },
+    exponentialRampToValueAtTime(v) { this._v1 = v; this._exp = true; },
   };
 }
 function node(kind) { return { _kind: kind, _out: null, connect(d) { this._out = d; } }; }
@@ -32,15 +32,19 @@ function makeActx() {
     resume() {},
     createGain() { const n = node('gain'); n.gain = P(); return n; },
     createBiquadFilter() { const n = node('filter'); n.type = 'lowpass'; n.frequency = P(); return n; },
+    createDelay() { const n = node('delay'); n.delayTime = P(); return n; },
     createBuffer(ch, len, sr) { const d = new Float32Array(len); return { length: len, sampleRate: sr, numberOfChannels: ch, getChannelData: () => d }; },
+    createPeriodicWave(real, imag) { return { real, imag, duty: real[0] }; },   // 占空比藏在 real[0]
     createOscillator() {
-      const n = node('osc'); n.type = 'sine'; n.frequency = P(); n._t0 = 0;
+      const n = node('osc'); n.type = 'sine'; n.frequency = P(); n._t0 = 0; n._duty = null;
+      n.setPeriodicWave = w => { n._duty = w.duty; n.type = 'custom'; };       // 真实 API 会把 type 变 custom
       n.start = t => { n._t0 = t; };
       n.stop = t => {
         const { g } = chainOf(n);
-        voices.push({ kind: 'osc', wave: n.type, f0: n.frequency._v0,
+        voices.push({ kind: 'osc', wave: n.type, duty: n._duty, f0: n.frequency._v0,
                       f1: n.frequency._v1 === null ? n.frequency._v0 : n.frequency._v1,
-                      vol: g ? g.gain._v0 : 0, at: n._t0, dur: t - n._t0 });
+                      vol: g ? g.gain._v0 : 0, env: g ? (g.gain._exp ? 'exp' : (g.gain._lin ? 'gate' : 'none')) : 'none',
+                      at: n._t0, dur: t - n._t0 });
       };
       return n;
     },
@@ -110,24 +114,37 @@ try {
     for (let i = 0; i < n; i++) { A.currentTime += 0.05; G.bgmTick(); }
     allVoices = allVoices.concat(voices);
   }
-  const melVoices = () => voices.filter(v => v.kind === 'osc' && v.wave === 'square');
+  const melVoices = () => voices.filter(v => v.kind === 'osc' && v.duty === 0.125);    // 主旋律：12.5% 脉冲
+  const harmVoices = () => voices.filter(v => v.kind === 'osc' && v.duty === 0.25);     // 第二脉冲：和声
   const noiseVoices = () => voices.filter(v => v.kind === 'noise');
+  const melOf = tr => tr.mel.filter(e => e.n).map(e => e.n);                         // 新记谱：{n,d} 取音高
 
-  // --- 1. 地上主题：旋律表按序被消费 + 三件鼓都在 ---
+  // --- 1. 地上主题：旋律表按序被消费 + 只留噪声踩镲 + 门控包络 ---
   voices = []; pump(4);
   check('1-1 选曲 over', G.track === 'over');
-  const expOver = G.BGM_TRACKS().over.mel.filter(n => n).slice(0, 8).map(n => Math.round(midi2f(n)));
+  const expOver = melOf(G.BGM_TRACKS().over).slice(0, 8).map(n => Math.round(midi2f(n)));
   const gotOver = melVoices().slice(0, 8).map(v => Math.round(v.f0));
   check('地上旋律表按序排音（前 8 音逐音比对）', JSON.stringify(expOver) === JSON.stringify(gotOver));
-  check('鼓组三件齐：底鼓/军鼓/踩镲',
-        voices.some(v => v.kind === 'osc' && v.wave === 'sine' && v.f0 > 140 && v.f1 < 60) &&
-        noiseVoices().some(v => v.ftype === 'bandpass') && noiseVoices().some(v => v.ftype === 'highpass'));
+  check('地上鼓组只留噪声踩镲（底鼓/军鼓按 NES 配器撤掉）',
+        noiseVoices().some(v => v.ftype === 'highpass') &&
+        !noiseVoices().some(v => v.ftype === 'bandpass') &&
+        !voices.some(v => v.kind === 'osc' && v.wave === 'sine'));
+  check('BGM 用门控包络而非指数衰减（满音量硬切）',
+        melVoices().length > 0 && melVoices().every(v => v.env === 'gate'));
+
+  // --- 1b. 第二脉冲和声：前半句独奏，后半句按调内三度进入 ---
+  voices = []; pump(4);
+  const hm = G.BGM_TRACKS().over.harmMap;
+  const expHarm = hm.filter(e => e).slice(0, 6).map(e => Math.round(midi2f(e.n)));
+  const gotHarm = harmVoices().slice(0, 6).map(v => Math.round(v.f0));
+  check('后半句第二脉冲和声进入', harmVoices().length > 0);
+  check('和声按调内三度表排音（前 6 音逐音比对）', JSON.stringify(expHarm) === JSON.stringify(gotHarm));
 
   // --- 2. 1-3 高空主题：换表 + 时值放慢（rate>1 → 同墙钟时间内音符更少） ---
   const denseOver = melVoices().length;
   G.startLevel(2); voices = []; pump(4);
   check('1-3 选曲 sky（关卡 music 字段驱动）', G.track === 'sky');
-  const expSky = G.BGM_TRACKS().sky.mel.filter(n => n).slice(0, 6).map(n => Math.round(midi2f(n)));
+  const expSky = melOf(G.BGM_TRACKS().sky).slice(0, 6).map(n => Math.round(midi2f(n)));
   const gotSky = melVoices().slice(0, 6).map(v => Math.round(v.f0));
   check('高空旋律表按序排音（高音区宽跳）', JSON.stringify(expSky) === JSON.stringify(gotSky) && Math.min(...expSky) >= midi2f(70));
   check('高空主题更慢（同时间音符数下降）', melVoices().length < denseOver);
@@ -136,13 +153,15 @@ try {
   // --- 3. 1-2 地下：由 theme:'under' 推导选曲，不新增冗余字段 ---
   G.startLevel(1); voices = []; pump(3);
   check('1-2 由 theme 推导为 under', G.track === 'under');
-  const expU = G.BGM_TRACKS().under.mel.filter(n => n).slice(0, 6).map(n => Math.round(midi2f(n)));
-  check('地下旋律表被消费', JSON.stringify(G.BGM_TRACKS().under.mel.filter(n => n).slice(0, 6).map(n => Math.round(midi2f(n)))) === JSON.stringify(expU));
+  const expU = melOf(G.BGM_TRACKS().under).slice(0, 6).map(n => Math.round(midi2f(n)));
+  const gotU = melVoices().slice(0, 6).map(v => Math.round(v.f0));
+  check('地下旋律表被消费', JSON.stringify(expU) === JSON.stringify(gotU));
 
-  // --- 4. Boss 战：入房 → 激活 → 换曲归零 + 驱动型鼓 + 音量抬升 ---
-  G.startLevel(0); G.gs = 'play';
+  // --- 4. Boss 战：1-4 入管进房 → 激活 → 换曲归零 + 驱动型鼓 + 音量抬升 ---
+  // （Boss 房在 1-4 的 col36 水管；1-1 的 col46 现在是机关挑战房，旧导航已失效）
+  G.startLevel(3); G.gs = 'play';
   const p = G.player(), inp = G.input();
-  p.x = 46.5 * 32; p.y = 11 * 32 - p.h; p.vy = 0; p.onGround = true; inp.down = true;
+  p.x = 36.5 * 32; p.y = 13 * 32 - p.h; p.vy = 0; p.onGround = true; inp.down = true;
   for (let i = 0; i < 8; i++) G.update(1 / 60);
   for (let i = 0; i < 70; i++) G.update(1 / 60);
   inp.down = false;
@@ -155,13 +174,18 @@ try {
   check('竞技场已激活', B.state === 'boss' && !B.atHome);
   voices = []; pump(3);
   check('激活后切到 Boss 曲', G.track === 'boss');
-  const expBoss = G.BGM_TRACKS().boss.mel.filter(n => n).slice(0, 8).map(n => Math.round(midi2f(n)));
+  const expBoss = melOf(G.BGM_TRACKS().boss).slice(0, 8).map(n => Math.round(midi2f(n)));
   const gotBoss = melVoices().slice(0, 8).map(v => Math.round(v.f0));
   check('Boss 旋律表按序排音（换曲从第 0 步起）', JSON.stringify(expBoss) === JSON.stringify(gotBoss));
   const hats = noiseVoices().filter(v => v.ftype === 'highpass').length;
   const kicks = voices.filter(v => v.kind === 'osc' && v.wave === 'sine').length;
   check('Boss 鼓组为驱动型（八分密镲+四分底鼓）', hats > 10 && kicks > 3);
-  check('Boss 曲音量高于探索曲', melVoices().every(v => v.vol <= 0.05 + 1e-9) && melVoices().some(v => v.vol > 0.042));
+  const BT = G.BGM_TRACKS();
+  check('Boss 曲音量高于探索曲', BT.boss.melVol > BT.over.melVol && BT.boss.basVol > BT.over.basVol);
+  check('BGM 旋律压在音效之下', BT.boss.melVol <= 0.05 && BT.over.melVol <= 0.05);
+  check('各主题通道循环长度整除旋律长度（低音/和声按小节对齐，不错拍）',
+        Object.values(BT).every(t => t.melMap.length % t.basMap.length === 0 &&
+                                     t.melMap.length % t.harmMap.length === 0));
 
   // --- 5. 参数守卫与静音 ---
   voices = []; G.noiseHit(NaN, 7600, 0.03, 0, 'highpass'); G.noiseHit(0.03, NaN, 0.03, 0); G.noiseHit(0.03, 7600, 0, 0);
