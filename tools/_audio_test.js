@@ -114,7 +114,7 @@ try {
   const A = G.actx;
   check('AudioContext 已建（含白噪缓冲）', !!A && A.currentTime === 0);
   check('主总线压缩器已挂接（阈值 -14dB / 4:1）', !!G.comp && G.comp.threshold.value === -14 && G.comp.ratio.value === 4);
-  check('BGM/SFX 分总线就位（SFX 收 0.35）', !!G.bgmGain && !!G.sfxGain && G.sfxGain.gain.value === 0.35);
+  check('BGM/SFX 分总线就位（SFX 收 0.25）', !!G.bgmGain && !!G.sfxGain && G.sfxGain.gain.value === 0.25);
 
   let allVoices = [];
   /** 以 50ms 为粒度推进虚拟时间并排音 */

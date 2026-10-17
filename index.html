@@ -2462,9 +2462,9 @@ function ensureAudio() {
         compNode.attack.value = 0.003; compNode.release.value = 0.18;
         masterGain.connect(compNode); compNode.connect(actx.destination);
       } catch (e) { masterGain.connect(actx.destination); }   // 无压缩器的老浏览器：直连兜底
-      /* 分总线：BGM 可被大事件压低（ducking）；SFX 收 0.35——门控包络峰值更硬，比旧版衰减音更响 */
+      /* 分总线：BGM 可被大事件压低（ducking）；SFX 收 0.25——门控包络峰值更硬，比旧版衰减音更响 */
       bgmGain = actx.createGain(); bgmGain.gain.value = 1; bgmGain.connect(masterGain);
-      sfxGain = actx.createGain(); sfxGain.gain.value = 0.35; sfxGain.connect(masterGain);
+      sfxGain = actx.createGain(); sfxGain.gain.value = 0.25; sfxGain.connect(masterGain);
       makeNoise();                                    // 白噪缓冲随上下文一次性生成（鼓组共用）
       initAudioFx();                                 // 脉冲占空比波形 + 回声总线（上下文重建时同步重建）
     } catch (e) { actx = null; }
